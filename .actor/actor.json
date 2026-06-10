@@ -1,0 +1,74 @@
+{
+  "actorSpecification": 1,
+  "name": "youtube-channel-scraper",
+  "title": "YouTube Channel Scraper - Stats, Videos & Analytics",
+  "description": "Scrape YouTube channels and their latest videos: subscribers, total views, video counts, descriptions, social links, plus per-video views, likes, comments, duration, and tags.",
+  "version": "1.0",
+  "dockerfile": "Dockerfile",
+  "input": "../INPUT_SCHEMA.json",
+  "pricingInfo": {
+    "pricingModel": "PAY_PER_EVENT",
+    "pricingPerEvent": {
+      "actorChargeEvents": {
+        "channel-scraped": {
+          "eventTitle": "Channel scraped",
+          "eventDescription": "Charged once per channel scraped (includes channel metadata and its latest videos).",
+          "eventPriceUsd": 0.005,
+          "isPrimaryEvent": true,
+          "isOneTimeEvent": false
+        }
+      }
+    }
+  },
+  "categories": ["SOCIAL_MEDIA", "MARKETING", "LEAD_GENERATION"],
+  "minMemoryMbytes": 2048,
+  "maxMemoryMbytes": 8192,
+  "defaultRunOptions": {
+    "memoryMbytes": 4096,
+    "timeoutSecs": 43200
+  },
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "views": {
+        "channels": {
+          "title": "Channels",
+          "transformation": {
+            "fields": ["channelUrl", "channelName", "handle", "subscriberCount", "subscriberCountNumber", "totalViews", "totalViewsNumber", "totalVideoCount", "totalVideoCountNumber", "joinDate", "country", "channelDescription", "avatarImageUrl", "bannerImageUrl", "channelCategory", "isVerified", "socialLinks", "contactEmail", "scrapedAt"]
+          },
+          "display": {
+            "component": "table",
+            "properties": {
+              "channelName": { "label": "Channel Name", "format": "text" },
+              "handle": { "label": "Handle", "format": "text" },
+              "subscriberCount": { "label": "Subscribers", "format": "text" },
+              "totalVideoCount": { "label": "Videos", "format": "text" },
+              "country": { "label": "Country", "format": "text" },
+              "isVerified": { "label": "Verified", "format": "boolean" },
+              "channelUrl": { "label": "URL", "format": "text" }
+            }
+          }
+        },
+        "videos": {
+          "title": "Videos",
+          "transformation": {
+            "fields": ["channelUrl", "channelName", "videoUrl", "videoTitle", "viewCount", "viewCountNumber", "likeCount", "likeCountNumber", "commentCount", "commentCountNumber", "durationSeconds", "durationFormatted", "publishedDate", "thumbnailUrl", "videoDescription", "tags", "category", "isShorts", "scrapedAt"]
+          },
+          "display": {
+            "component": "table",
+            "properties": {
+              "videoTitle": { "label": "Title", "format": "text" },
+              "channelName": { "label": "Channel", "format": "text" },
+              "viewCount": { "label": "Views", "format": "text" },
+              "likeCount": { "label": "Likes", "format": "text" },
+              "durationFormatted": { "label": "Duration", "format": "text" },
+              "publishedDate": { "label": "Published", "format": "text" },
+              "isShorts": { "label": "Shorts", "format": "boolean" },
+              "videoUrl": { "label": "URL", "format": "text" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

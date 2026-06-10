@@ -1,0 +1,64 @@
+{
+  "title": "YouTube Channel Scraper — Extract Analytics & Video Data",
+  "description": "Scrape YouTube channels and their latest videos for analytics data. Accepts channel URLs, handles (@name), or search keywords.",
+  "type": "object",
+  "schemaVersion": 1,
+  "required": [],
+  "properties": {
+    "channelUrls": {
+      "title": "Channel URLs",
+      "description": "List of YouTube channel URLs or handles to scrape (e.g. https://www.youtube.com/@mkbhd or @mkbhd)",
+      "type": "array",
+      "editor": "stringList",
+      "default": ["https://www.youtube.com/@mkbhd"],
+      "prefill": ["https://www.youtube.com/@mkbhd"],
+      "sectionCaption": "Channel Input",
+      "sectionDescription": "Provide YouTube channel URLs or handles. Both full URLs and @handles are accepted."
+    },
+    "searchKeywords": {
+      "title": "Search Keywords",
+      "description": "Keywords to search YouTube for channels. Results will be scraped automatically.",
+      "type": "array",
+      "editor": "stringList",
+      "prefill": [],
+      "sectionCaption": "Search Input",
+      "sectionDescription": "Optional: search YouTube for channels by keyword."
+    },
+    "maxChannels": {
+      "title": "Max Channels from Search",
+      "description": "Maximum number of channels to scrape from each search keyword",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 10,
+      "editor": "number"
+    },
+    "maxVideosPerChannel": {
+      "title": "Max Videos Per Channel",
+      "description": "Number of latest videos to scrape per channel (max 100)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 10,
+      "editor": "number"
+    },
+    "includeShorts": {
+      "title": "Include Shorts",
+      "description": "Whether to include YouTube Shorts in video scraping",
+      "type": "boolean",
+      "default": false,
+      "editor": "checkbox"
+    },
+    "proxyConfiguration": {
+      "title": "Proxy Configuration",
+      "description": "Proxy settings for the crawler. Datacenter proxies work well for YouTube.",
+      "type": "object",
+      "editor": "proxy",
+      "default": {
+        "useApifyProxy": true
+      },
+      "sectionCaption": "Proxy Settings",
+      "sectionDescription": "Configure proxies to avoid rate limiting."
+    }
+  }
+}
