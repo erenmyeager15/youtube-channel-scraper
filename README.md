@@ -1,5 +1,7 @@
 # YouTube Channel Scraper — Extract Analytics & Video Data
 
+Get clean YouTube channel and video analytics in minutes — subscribers, total views, video counts, plus per-video views, likes, comments, duration, and tags. This YouTube channel scraper takes channel URLs, @handles (e.g. `@mkbhd`), or search keywords and needs no login and no API key. Export to JSON, CSV, Excel, or HTML, or pull via the Apify API.
+
 A production-ready Apify Actor that scrapes YouTube for comprehensive channel and video analytics data.
 
 ## What it does
@@ -110,6 +112,14 @@ The per-channel pricing keeps costs simple and predictable. You pay once per cha
 | `maxVideosPerChannel` | `number` | `20` | Videos to scrape per channel (max 100) |
 | `includeShorts` | `boolean` | `false` | Include YouTube Shorts in results |
 | `proxyConfiguration` | `object` | `{ useApifyProxy: true }` | Proxy settings |
+
+## How to Scrape YouTube Channels (Step by Step)
+
+1. Click **Try for free** / **Run**.
+2. Add YouTube channel URLs or @handles (e.g. `@mkbhd`), or enter search keywords to find channels automatically.
+3. Set **Max Videos Per Channel** and **Max Channels from Search** — start small to test.
+4. Toggle **Include Shorts** if you want Shorts in the results, then click **Run**.
+5. When the run finishes, export your data as JSON, CSV, Excel, or HTML, or pull it via the Apify API.
 
 ## Known Limitations
 
