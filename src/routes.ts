@@ -136,7 +136,6 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
       channelCategory: null,
       isVerified: channelData.isVerified,
       socialLinks: [],
-      contactEmail: null,
       scrapedAt: new Date().toISOString(),
     };
 

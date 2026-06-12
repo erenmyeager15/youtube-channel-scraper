@@ -14,7 +14,7 @@ This Actor extracts detailed data from YouTube channels and their latest videos.
 - Join date and country
 - Channel description and avatar/banner images
 - Verified badge status
-- Social links and contact email
+- Social links
 - Channel category/topic
 
 ### Video Data Extracted (per latest N videos)
@@ -61,7 +61,6 @@ This Actor extracts detailed data from YouTube channels and their latest videos.
   "channelCategory": "Science & Technology",
   "isVerified": true,
   "socialLinks": ["https://twitter.com/MKBHD"],
-  "contactEmail": null,
   "scrapedAt": "2026-06-08T12:00:00.000Z"
 }
 ```
@@ -134,3 +133,9 @@ The per-channel pricing keeps costs simple and predictable. You pay once per cha
 - [Apify Platform](https://apify.com)
 - [Crawlee Documentation](https://crawlee.dev)
 - [Playwright API](https://playwright.dev)
+
+## Responsible Use
+
+This Actor is intended for lawful collection of publicly available information only. Users are responsible for ensuring their use complies with the source website's terms, robots.txt, applicable privacy laws, including India's DPDP Act, and all local regulations.
+
+Do not use this Actor to collect, store, sell, or misuse personal data without a lawful basis. The Actor author is not responsible for misuse by end users.

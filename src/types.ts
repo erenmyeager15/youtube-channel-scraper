@@ -46,7 +46,6 @@ export interface ChannelRecord {
   channelCategory: string | null;
   isVerified: boolean;
   socialLinks: string[];
-  contactEmail: string | null;
   scrapedAt: string;
 }
 
