@@ -150,7 +150,7 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
     if (!channelRecord.channelName && channelRecord.subscriberCountNumber === null) {
       log.warning(`No channel data extracted for ${channelUrl} (blocked or layout changed). Not saving or charging.`);
       session?.retire();
-      return;
+      throw new Error(`No channel data extracted for ${channelUrl}`);
     }
 
     await Actor.pushData(channelRecord);
@@ -276,6 +276,7 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
   } catch (error) {
     log.error(`Error scraping channel ${channelUrl}: ${error}`);
     session?.retire();
+    throw error;
   }
 }
 
