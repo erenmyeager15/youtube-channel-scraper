@@ -54,6 +54,13 @@ function truncate(text: string | null, maxLen: number): string | null {
   return text.length > maxLen ? text.substring(0, maxLen) + '...' : text;
 }
 
+function redactContactInfo(text: string | null): string | null {
+  if (!text) return null;
+  return text
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted]')
+    .replace(/(?:\+?\d[\s().-]?){8,}\d/g, '[redacted]');
+}
+
 function extractNumber(text: string | null): number | null {
   if (!text) return null;
   const match = text.replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
@@ -130,7 +137,7 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
       totalVideoCountNumber,
       joinDate: null,
       country: null,
-      channelDescription: truncate(channelData.description, 2000),
+      channelDescription: redactContactInfo(truncate(channelData.description, 2000)),
       avatarImageUrl: channelData.avatarUrl,
       bannerImageUrl: channelData.bannerUrl,
       channelCategory: null,
@@ -146,7 +153,7 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
       return;
     }
 
-    await Actor.pushData(channelRecord, 'channels');
+    await Actor.pushData(channelRecord);
     log.info(`Channel data pushed: ${channelRecord.channelName || channelUrl} (${channelRecord.subscriberCount ?? '?'} subs)`);
 
     try {
@@ -261,7 +268,7 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
           scrapedAt: new Date().toISOString(),
         };
         if (!includeShorts && durationSeconds !== null && durationSeconds <= 60 && /short/i.test(v.lengthText ?? '')) continue;
-        await Actor.pushData(videoRecord, 'videos');
+        await Actor.pushData(videoRecord);
       }
     }
 
@@ -382,14 +389,14 @@ async function scrapeVideo(
       durationFormatted: formatDuration(durationSeconds),
       publishedDate: videoData.publishedText || null,
       thumbnailUrl: videoData.thumbnailUrl,
-      videoDescription: truncate(videoData.description, 500),
+      videoDescription: redactContactInfo(truncate(videoData.description, 500)),
       tags: videoData.tags,
       category: videoData.category,
       isShorts: isShort,
       scrapedAt: new Date().toISOString(),
     };
 
-    await Actor.pushData(videoRecord, 'videos');
+    await Actor.pushData(videoRecord);
     log.debug(`Video pushed: ${videoRecord.videoTitle || videoUrl}`);
   } catch (error) {
     log.warning(`Error scraping video ${videoUrl}: ${error}`);
