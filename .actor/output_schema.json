@@ -1,0 +1,14 @@
+{
+  "actorOutputSchemaVersion": 1,
+  "title": "YouTube Channel Scraper Output",
+  "description": "Structured YouTube channel and video analytics extracted from public channel pages. Results include channel metadata, subscriber counts, video metrics, thumbnails, tags, URLs, and scraped timestamps.",
+  "type": "object",
+  "properties": {
+    "results": {
+      "type": "string",
+      "title": "YouTube channel and video records",
+      "description": "Clean dataset items containing YouTube channel metadata and latest video analytics.",
+      "template": "{{links.apiDefaultDatasetUrl}}/items"
+    }
+  }
+}
