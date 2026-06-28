@@ -1,7 +1,7 @@
 import { Actor } from 'apify';
 import { PlaywrightCrawler, log } from 'crawlee';
 import { ActorInput } from './types.js';
-import { channelHandler, searchHandler } from './routes.js';
+import { channelHandler, getScrapeState, searchHandler } from './routes.js';
 
 await Actor.init();
 
@@ -24,6 +24,8 @@ const proxyConfiguration = proxyConfig
     })
   : undefined;
 
+let failedRequestCount = 0;
+
 const crawler = new PlaywrightCrawler({
   proxyConfiguration,
   maxConcurrency: 3,
@@ -32,9 +34,15 @@ const crawler = new PlaywrightCrawler({
   sessionPoolOptions: {
     maxPoolSize: 50,
   },
+  maxSessionRotations: 3,
   retryOnBlocked: true,
   maxRequestRetries: 3,
   requestHandler: async (context) => {
+    if (getScrapeState().spendingLimitReached) {
+      context.request.noRetry = true;
+      throw new Error('Charge limit reached; stopping remaining YouTube requests.');
+    }
+
     const label = context.request.userData['label'] as string | undefined;
 
     if (label === 'channel') {
@@ -46,6 +54,7 @@ const crawler = new PlaywrightCrawler({
     }
   },
   failedRequestHandler: async ({ request, log: reqLog }, error) => {
+    failedRequestCount += 1;
     reqLog.error(`Request ${request.url} failed after retries: ${error.message}`);
   },
 });
@@ -100,6 +109,16 @@ log.info(`Starting crawl with ${requests.length} initial request(s)`);
 
 await crawler.run(requests);
 
-log.info('Crawl complete. Results saved to "channels" and "videos" datasets.');
+const scrapeState = getScrapeState();
+
+if (scrapeState.spendingLimitReached) {
+  throw new Error('YouTube crawl stopped because the charge limit was reached.');
+}
+
+if (scrapeState.chargedChannelCount === 0) {
+  throw new Error(`No YouTube channel rows were saved. Failed requests: ${failedRequestCount}.`);
+}
+
+log.info(`Crawl complete. Saved channel rows: ${scrapeState.chargedChannelCount}. Saved video rows: ${scrapeState.savedVideoCount}. Failed requests: ${failedRequestCount}.`);
 
 await Actor.exit();

@@ -2,6 +2,20 @@ import { PlaywrightCrawlingContext } from 'crawlee';
 import { Actor } from 'apify';
 import { ChannelRecord, VideoRecord, ChannelUserData, SearchUserData } from './types.js';
 
+const CHANNEL_SCRAPED_EVENT = 'channel-scraped';
+
+let chargedChannelCount = 0;
+let savedVideoCount = 0;
+let spendingLimitReached = false;
+
+export function getScrapeState() {
+  return {
+    chargedChannelCount,
+    savedVideoCount,
+    spendingLimitReached,
+  };
+}
+
 function randomDelay(min = 500, max = 1500): Promise<void> {
   const ms = Math.floor(Math.random() * (max - min + 1)) + min;
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -72,6 +86,11 @@ function extractNumber(text: string | null): number | null {
 export async function channelHandler(context: PlaywrightCrawlingContext): Promise<void> {
   const { page, request, log, session } = context;
   const { channelUrl, maxVideos, includeShorts } = request.userData as ChannelUserData;
+
+  if (spendingLimitReached) {
+    request.noRetry = true;
+    throw new Error('Charge limit already reached; stopping before scraping another YouTube channel.');
+  }
 
   log.info(`Scraping channel: ${channelUrl}`);
 
@@ -153,14 +172,23 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
       throw new Error(`No channel data extracted for ${channelUrl}`);
     }
 
-    await Actor.pushData(channelRecord);
-    log.info(`Channel data pushed: ${channelRecord.channelName || channelUrl} (${channelRecord.subscriberCount ?? '?'} subs)`);
+    const charge = await Actor.pushData(channelRecord, CHANNEL_SCRAPED_EVENT);
+    const recordWasSaved = charge.chargedCount > 0 || !charge.eventChargeLimitReached;
+    if (!recordWasSaved) {
+      spendingLimitReached = true;
+      request.noRetry = true;
+      log.warning(`Charge limit reached for ${CHANNEL_SCRAPED_EVENT}; no more channel work will be saved.`);
+      throw new Error(`Charge limit reached for ${CHANNEL_SCRAPED_EVENT}`);
+    }
+    chargedChannelCount += 1;
+    log.info(`Saved channel row: ${channelRecord.channelName || channelUrl} (${channelRecord.subscriberCount ?? '?'} subs)`);
 
-    try {
-      await Actor.charge({ eventName: 'channel-scraped' });
-      log.info('Charged event: channel-scraped');
-    } catch (e) {
-      log.warning(`PPE charge failed: ${e}`);
+    if (charge.eventChargeLimitReached) {
+      spendingLimitReached = true;
+      request.noRetry = true;
+      session?.retire();
+      log.warning('Charge limit reached after saving the current channel; stopping before videos or other channel work.');
+      return;
     }
 
     // Videos: parse the /videos tab ytInitialData grid (no per-video navigation).
@@ -246,6 +274,9 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
 
       for (const v of limited) {
         const durationSeconds = parseDurationToSeconds(v.lengthText);
+        const isShorts = durationSeconds !== null && durationSeconds <= 60;
+        if (!includeShorts && isShorts) continue;
+
         const videoRecord: VideoRecord = {
           channelUrl,
           channelName: channelRecord.channelName,
@@ -264,11 +295,11 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
           videoDescription: null,
           tags: [],
           category: null,
-          isShorts: false,
+          isShorts,
           scrapedAt: new Date().toISOString(),
         };
-        if (!includeShorts && durationSeconds !== null && durationSeconds <= 60 && /short/i.test(v.lengthText ?? '')) continue;
         await Actor.pushData(videoRecord);
+        savedVideoCount += 1;
       }
     }
 
@@ -398,6 +429,7 @@ async function scrapeVideo(
     };
 
     await Actor.pushData(videoRecord);
+    savedVideoCount += 1;
     log.debug(`Video pushed: ${videoRecord.videoTitle || videoUrl}`);
   } catch (error) {
     log.warning(`Error scraping video ${videoUrl}: ${error}`);
@@ -408,6 +440,11 @@ export async function searchHandler(context: PlaywrightCrawlingContext): Promise
   const { page, request, log, session } = context;
   const searchData = request.userData as SearchUserData;
   const { keyword, maxChannels } = searchData;
+
+  if (spendingLimitReached) {
+    request.noRetry = true;
+    throw new Error('Charge limit already reached; stopping before searching more YouTube channels.');
+  }
 
   log.info(`Searching YouTube for: ${keyword}`);
 
@@ -448,6 +485,11 @@ export async function searchHandler(context: PlaywrightCrawlingContext): Promise
 
     log.info(`Found ${channelUrls.length} channels from search: "${keyword}"`);
 
+    if (channelUrls.length === 0) {
+      request.noRetry = true;
+      throw new Error(`No YouTube channels found for search keyword: "${keyword}"`);
+    }
+
     for (const url of channelUrls) {
       await context.addRequests([{
         url,
@@ -464,5 +506,6 @@ export async function searchHandler(context: PlaywrightCrawlingContext): Promise
   } catch (error) {
     log.error(`Error searching for "${keyword}": ${error}`);
     session?.retire();
+    throw error;
   }
 }
