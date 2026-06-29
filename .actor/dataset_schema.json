@@ -5,23 +5,15 @@
       "title": "Channels",
       "transformation": {
         "fields": [
-          "channelUrl",
           "channelName",
           "handle",
           "subscriberCount",
           "subscriberCountNumber",
-          "totalViews",
-          "totalViewsNumber",
           "totalVideoCount",
           "totalVideoCountNumber",
-          "joinDate",
-          "country",
-          "channelDescription",
           "avatarImageUrl",
-          "bannerImageUrl",
-          "channelCategory",
           "isVerified",
-          "socialLinks",
+          "channelUrl",
           "scrapedAt"
         ]
       },
@@ -31,10 +23,13 @@
           "channelName": { "label": "Channel Name", "format": "text" },
           "handle": { "label": "Handle", "format": "text" },
           "subscriberCount": { "label": "Subscribers", "format": "text" },
+          "subscriberCountNumber": { "label": "Subscribers (number)", "format": "number" },
           "totalVideoCount": { "label": "Videos", "format": "text" },
-          "country": { "label": "Country", "format": "text" },
+          "totalVideoCountNumber": { "label": "Videos (number)", "format": "number" },
+          "avatarImageUrl": { "label": "Avatar", "format": "image" },
           "isVerified": { "label": "Verified", "format": "boolean" },
-          "channelUrl": { "label": "URL", "format": "text" }
+          "channelUrl": { "label": "Channel URL", "format": "link" },
+          "scrapedAt": { "label": "Scraped at", "format": "date" }
         }
       }
     },
@@ -42,24 +37,16 @@
       "title": "Videos",
       "transformation": {
         "fields": [
-          "channelUrl",
-          "channelName",
-          "videoUrl",
           "videoTitle",
+          "channelName",
           "viewCount",
           "viewCountNumber",
-          "likeCount",
-          "likeCountNumber",
-          "commentCount",
-          "commentCountNumber",
           "durationSeconds",
           "durationFormatted",
           "publishedDate",
           "thumbnailUrl",
-          "videoDescription",
-          "tags",
-          "category",
           "isShorts",
+          "videoUrl",
           "scrapedAt"
         ]
       },
@@ -69,11 +56,14 @@
           "videoTitle": { "label": "Title", "format": "text" },
           "channelName": { "label": "Channel", "format": "text" },
           "viewCount": { "label": "Views", "format": "text" },
-          "likeCount": { "label": "Likes", "format": "text" },
+          "viewCountNumber": { "label": "Views (number)", "format": "number" },
+          "durationSeconds": { "label": "Duration (seconds)", "format": "number" },
           "durationFormatted": { "label": "Duration", "format": "text" },
           "publishedDate": { "label": "Published", "format": "text" },
+          "thumbnailUrl": { "label": "Thumbnail", "format": "image" },
           "isShorts": { "label": "Shorts", "format": "boolean" },
-          "videoUrl": { "label": "URL", "format": "text" }
+          "videoUrl": { "label": "Video URL", "format": "link" },
+          "scrapedAt": { "label": "Scraped at", "format": "date" }
         }
       }
     }

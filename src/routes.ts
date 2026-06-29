@@ -100,7 +100,7 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
     await page.waitForFunction(() => !!(window as unknown as { ytInitialData?: unknown }).ytInitialData, { timeout: 15000 }).catch(() => {});
     await randomDelay(800, 2000);
 
-    // YouTube embeds all channel data in window.ytInitialData — far more reliable
+    // YouTube embeds all channel data in window.ytInitialData, which is more reliable
     // than the volatile DOM selectors.
     const channelData = await page.evaluate(() => {
       /* eslint-disable @typescript-eslint/no-explicit-any */

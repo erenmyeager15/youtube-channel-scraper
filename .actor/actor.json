@@ -1,20 +1,25 @@
 {
   "actorSpecification": 1,
   "name": "youtube-channel-scraper",
-  "title": "YouTube Channel Scraper - Stats, Videos & Analytics",
-  "description": "Scrape YouTube channels and their latest videos: subscribers, total views, video counts, descriptions, social links, plus per-video views, likes, comments, duration, and tags.",
+  "title": "YouTube Channel Scraper: Stats & Latest Videos",
+  "description": "Scrape public YouTube channel stats and latest-video summaries from channel URLs, handles, or search keywords. Get names, subscribers, video counts, views, durations, thumbnails, and URLs.",
   "version": "1.0",
+  "buildTag": "latest",
   "dockerfile": "Dockerfile",
   "input": "../INPUT_SCHEMA.json",
   "readme": "../README.md",
+  "exampleRunInput": {
+    "body": "{\"channelUrls\":[\"https://www.youtube.com/@mkbhd\"],\"searchKeywords\":[],\"maxChannels\":1,\"maxVideosPerChannel\":1,\"includeShorts\":false,\"proxyConfiguration\":{\"useApifyProxy\":true}}",
+    "contentType": "application/json; charset=utf-8"
+  },
   "pricingInfo": {
     "pricingModel": "PAY_PER_EVENT",
     "pricingPerEvent": {
       "actorChargeEvents": {
         "apify-actor-start": {
-          "eventTitle": "Actor start",
-          "eventDescription": "Charged when the run starts to cover browser startup and the proxy session. Number of events depends on memory (one per GB, minimum one).",
-          "eventPriceUsd": 0.001,
+          "eventTitle": "Actor Start",
+          "eventDescription": "Charged when the Actor starts running. Number of events charged depends on Actor memory (one event per GB, minimum one event).",
+          "eventPriceUsd": 0.00005,
           "isPrimaryEvent": false,
           "isOneTimeEvent": true
         },
@@ -28,12 +33,13 @@
       }
     }
   },
-  "categories": ["SOCIAL_MEDIA", "MARKETING"],
+  "categories": ["SOCIAL_MEDIA", "MARKETING", "BUSINESS"],
   "minMemoryMbytes": 2048,
-  "maxMemoryMbytes": 8192,
+  "maxMemoryMbytes": 2048,
   "defaultRunOptions": {
+    "build": "latest",
     "memoryMbytes": 2048,
-    "timeoutSecs": 1800
+    "timeoutSecs": 900
   },
   "output": "./output_schema.json",
   "storages": {

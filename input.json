@@ -1,4 +1,10 @@
 {
   "channelUrls": ["https://www.youtube.com/@mkbhd"],
-  "maxVideosPerChannel": 5
+  "searchKeywords": [],
+  "maxChannels": 1,
+  "maxVideosPerChannel": 1,
+  "includeShorts": false,
+  "proxyConfiguration": {
+    "useApifyProxy": true
+  }
 }

@@ -1,7 +1,7 @@
 {
   "name": "youtube-channel-scraper",
   "version": "1.0.0",
-  "description": "Apify Actor that scrapes YouTube for channel and video analytics data",
+  "description": "Scrape public YouTube channel stats and latest-video summaries from URLs, handles, or search keywords.",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {

@@ -1,141 +1,176 @@
-# YouTube Channel Scraper — Extract Analytics & Video Data
+# YouTube Channel Scraper
 
-Get clean YouTube channel and video analytics in minutes — subscribers, total views, video counts, plus per-video views, likes, comments, duration, and tags. This YouTube channel scraper takes channel URLs, @handles (e.g. `@mkbhd`), or search keywords and needs no login and no API key. Export to JSON, CSV, Excel, or HTML, or pull via the Apify API.
+Scrape public YouTube channel stats and latest-video summaries without a YouTube login or API key. Provide channel URLs, `@handles`, or search keywords and receive structured channel and video rows for monitoring, research, reporting, and automation.
 
-A production-ready Apify Actor that scrapes YouTube for comprehensive channel and video analytics data.
+The Actor uses a browser to read public YouTube channel pages. It returns the fields YouTube exposes on those pages and marks unavailable fields as `null`.
 
-## What it does
+## Quick start
 
-This Actor extracts detailed data from YouTube channels and their latest videos. Provide channel URLs, handles (e.g., `@mkbhd`), or search keywords — the Actor will scrape channel metadata and video analytics for each result.
+Run one channel with one latest video:
 
-### Channel Data Extracted
-- Channel name, handle, and URL
-- Subscriber count, total views, total video count
-- Join date and country
-- Channel description and avatar/banner images
-- Verified badge status
-- Social links
-- Channel category/topic
+```json
+{
+  "channelUrls": [
+    "https://www.youtube.com/@mkbhd"
+  ],
+  "searchKeywords": [],
+  "maxChannels": 1,
+  "maxVideosPerChannel": 1,
+  "includeShorts": false,
+  "proxyConfiguration": {
+    "useApifyProxy": true
+  }
+}
+```
 
-### Video Data Extracted (per latest N videos)
-- Video title and URL
-- View count, like count, comment count
-- Duration (seconds + formatted)
-- Published date and thumbnail URL
-- Video description (first 500 chars)
-- Tags list and category
-- YouTube Shorts detection
+Export the results as JSON, CSV, Excel, XML, or HTML, or consume them through the Apify API, schedules, webhooks, Make, Zapier, n8n, and other integrations.
 
-## Use Cases
+## What it extracts
 
-1. **Influencer Research** — Analyze potential influencer partners by examining their subscriber growth, engagement rates, and content consistency across recent videos.
+### Channel rows
 
-2. **Competitor Analysis** — Track competitor channels to understand their upload frequency, video performance, and content strategy over time.
+- Channel URL, name, and handle
+- Subscriber count as displayed and as a parsed number
+- Total video count as displayed and as a parsed number
+- Public channel description with contact details redacted
+- Avatar and banner image URLs when available
+- Verified-channel flag
+- Extraction timestamp
 
-3. **Content Strategy** — Study successful channels in your niche to identify trending topics, optimal video lengths, and high-performing content formats.
+### Latest-video rows
 
-4. **Agency Reporting** — Automate the collection of client channel metrics for regular performance reports without manual data entry.
+- Channel URL and channel name
+- Video URL and title
+- View count as displayed and as a parsed number
+- Duration in seconds and formatted text
+- Relative published date shown by YouTube
+- Thumbnail URL
+- Shorts detection
+- Extraction timestamp
 
-5. **Brand Partnership Research** — Evaluate potential brand partners by analyzing their audience size, engagement metrics, and content quality before outreach.
+The dataset schema retains additional nullable fields for compatibility. The active fast channel-grid path does not currently populate total channel views, join date, country, social links, video likes, comments, descriptions, tags, or categories.
 
-## Sample Output
+## Output dataset
 
-### Channel Record
+One run writes both record types to the default dataset:
+
+- The `Channels` view shows channel-level records.
+- The `Videos` view shows the latest-video records.
+- A video row can be identified by the presence of `videoUrl`.
+
+### Verified channel sample
+
+This shortened sample comes from a successful public Actor run:
 
 ```json
 {
   "channelUrl": "https://www.youtube.com/@mkbhd",
   "channelName": "Marques Brownlee",
   "handle": "@mkbhd",
-  "subscriberCount": "19.3M subscribers",
-  "subscriberCountNumber": 19300000,
-  "totalViews": "4,613,201,035 views",
-  "totalViewsNumber": 4613201035,
-  "totalVideoCount": "1,823 videos",
-  "totalVideoCountNumber": 1823,
-  "joinDate": "Mar 22, 2008",
-  "country": "United States",
-  "channelDescription": "MKBHD uploads quality videos about technology...",
-  "avatarImageUrl": "https://yt3.googleusercontent.com/...",
-  "bannerImageUrl": "https://yt3.googleusercontent.com/...",
-  "channelCategory": "Science & Technology",
+  "subscriberCount": "21M subscribers",
+  "subscriberCountNumber": 21000000,
+  "totalVideoCount": "1.8K videos",
+  "totalVideoCountNumber": 1800,
   "isVerified": true,
-  "socialLinks": ["https://twitter.com/MKBHD"],
-  "scrapedAt": "2026-06-08T12:00:00.000Z"
+  "scrapedAt": "2026-06-22T07:56:07.305Z"
 }
 ```
 
-### Video Record
+### Verified video sample
 
 ```json
 {
   "channelUrl": "https://www.youtube.com/@mkbhd",
   "channelName": "Marques Brownlee",
-  "videoUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-  "videoTitle": "Galaxy S25 Ultra Review: The Best Samsung Phone?",
-  "viewCount": "5,234,567 views",
-  "viewCountNumber": 5234567,
-  "likeCount": "182K likes",
-  "likeCountNumber": 182000,
-  "commentCount": "12,345 comments",
-  "commentCountNumber": 12345,
-  "durationSeconds": 1245,
-  "durationFormatted": "20:45",
-  "publishedDate": "Jan 22, 2026",
-  "thumbnailUrl": "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
-  "videoDescription": "The Samsung Galaxy S25 Ultra is here with a new chip...",
-  "tags": ["samsung", "galaxy s25", "review", "android"],
-  "category": "Science & Technology",
+  "videoUrl": "https://www.youtube.com/watch?v=WOzcFkld6_g",
+  "videoTitle": "The Most Interesting Displays In The World!",
+  "viewCount": "2.3M views",
+  "viewCountNumber": 2300000,
+  "durationSeconds": 957,
+  "durationFormatted": "15:57",
+  "publishedDate": "5 days ago",
   "isShorts": false,
-  "scrapedAt": "2026-06-08T12:00:00.000Z"
+  "scrapedAt": "2026-06-22T07:56:11.022Z"
 }
 ```
 
+Counts, titles, thumbnails, and relative dates can change when YouTube updates the page.
+
+## Input
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `channelUrls` | array | One sample channel | Full YouTube channel URLs or `@handles` |
+| `searchKeywords` | array | Empty | Optional keywords used to discover channels |
+| `maxChannels` | integer | `1` | Maximum channels scraped per search keyword, from 1 to 50 |
+| `maxVideosPerChannel` | integer | `1` | Latest videos requested per channel, from 1 to 100 |
+| `includeShorts` | boolean | `false` | Include videos detected as Shorts |
+| `proxyConfiguration` | object | Apify Proxy on | Proxy settings for browser requests |
+
+Provide at least one channel URL, handle, or search keyword. Direct channel inputs are more predictable than keyword search. Search results vary by region and ranking.
+
+## Common workflows
+
+### Monitor selected channels
+
+Use direct channel URLs, schedule repeated runs, and compare subscriber counts, video counts, and latest-video rows over time.
+
+### Build a creator research table
+
+Collect public channel size, verified status, descriptions, and recent video performance for a defined set of channels.
+
+### Track competitor publishing
+
+Compare latest titles, view counts, durations, and relative publish times across competing channels in the same niche.
+
+### Create recurring reports
+
+Send dataset rows to a spreadsheet, warehouse, dashboard, or workflow tool through Apify integrations.
+
 ## Pricing
 
-| Event | Price | Description |
-|-------|-------|-------------|
-| Channel Scraped | $0.005 | Per channel — includes full channel metadata + N latest videos |
+This Actor uses Pay Per Event pricing.
 
-**Example cost:** 10 channels × 20 videos each = $0.05 total
+| Event | Price |
+| --- | ---: |
+| Actor start | $0.00005 per GB of memory |
+| Each successfully saved `channel-scraped` item | $0.005 |
 
-The per-channel pricing keeps costs simple and predictable. You pay once per channel regardless of how many videos are scraped.
+The Actor is capped at 2 GB of memory, so the startup charge is approximately $0.00010 per run. Latest-video rows are included in the channel charge. A one-channel run is therefore approximately $0.00510 before any applicable account-level charges.
 
-## Configuration
+Failed channel extractions are not charged as `channel-scraped` events. The Actor stops accepting new channel work when the run reaches the user's maximum-cost limit.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `channelUrls` | `string[]` | `[]` | YouTube channel URLs or @handles to scrape |
-| `searchKeywords` | `string[]` | `[]` | Keywords to search for channels |
-| `maxChannels` | `number` | `10` | Max channels per search keyword |
-| `maxVideosPerChannel` | `number` | `20` | Videos to scrape per channel (max 100) |
-| `includeShorts` | `boolean` | `false` | Include YouTube Shorts in results |
-| `proxyConfiguration` | `object` | `{ useApifyProxy: true }` | Proxy settings |
+## Limits and reliability
 
-## How to Scrape YouTube Channels (Step by Step)
+- YouTube changes its page structure regularly. Select fields may temporarily become unavailable.
+- Subscriber counts can be hidden or abbreviated.
+- Search results depend on region and YouTube ranking.
+- Large runs can encounter rate limits; begin with small batches.
+- Shorts detection uses the public duration shown in the channel grid and may not classify every edge case.
+- Video likes, comments, tags, descriptions, and categories are currently emitted as nullable compatibility fields, not guaranteed analytics.
+- The Actor reads public pages only and does not access YouTube Studio, private analytics, account data, or private videos.
 
-1. Click **Try for free** / **Run**.
-2. Add YouTube channel URLs or @handles (e.g. `@mkbhd`), or enter search keywords to find channels automatically.
-3. Set **Max Videos Per Channel** and **Max Channels from Search** — start small to test.
-4. Toggle **Include Shorts** if you want Shorts in the results, then click **Run**.
-5. When the run finishes, export your data as JSON, CSV, Excel, or HTML, or pull it via the Apify API.
+## API example
 
-## Known Limitations
+```bash
+curl -X POST "https://api.apify.com/v2/acts/fascinating_lentil~youtube-channel-scraper/runs?token=YOUR_APIFY_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channelUrls": ["https://www.youtube.com/@mkbhd"],
+    "searchKeywords": [],
+    "maxChannels": 1,
+    "maxVideosPerChannel": 1,
+    "includeShorts": false,
+    "proxyConfiguration": {"useApifyProxy": true}
+  }'
+```
 
-- **Subscriber count hidden:** Some smaller or private channels hide subscriber counts. The Actor returns `null` for these fields.
-- **YouTube rate limiting:** Very large runs (100+ channels) may experience temporary blocks. The Actor uses session pools and random delays to mitigate this.
-- **Like counts:** YouTube sometimes displays abbreviated like counts (e.g., "123K"). The Actor stores both the raw text and parsed numeric value.
-- **Shorts duration:** YouTube Shorts may not always report accurate duration data due to platform limitations.
-- **Search mode:** Channel search results may vary by region and are subject to YouTube's search algorithm ranking.
+## Responsible use
 
-## Resources
+Use this Actor only for lawful collection of publicly available information. You are responsible for complying with YouTube's terms, copyright rules, privacy laws, and regulations that apply to your use case.
 
-- [Apify Platform](https://apify.com)
-- [Crawlee Documentation](https://crawlee.dev)
-- [Playwright API](https://playwright.dev)
+Do not use the output for spam, harassment, profiling, or unlawful collection of personal data. This Actor is an independent tool and is not affiliated with, endorsed by, or sponsored by YouTube or Google.
 
-## Responsible Use
+## License
 
-This Actor is intended for lawful collection of publicly available information only. Users are responsible for ensuring their use complies with the source website's terms, robots.txt, applicable privacy laws, including India's DPDP Act, and all local regulations.
-
-Do not use this Actor to collect, store, sell, or misuse personal data without a lawful basis. The Actor author is not responsible for misuse by end users.
+Apache-2.0.

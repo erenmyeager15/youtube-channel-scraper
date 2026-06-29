@@ -10,8 +10,8 @@ const input = await Actor.getInput<ActorInput>() ?? {};
 const {
   channelUrls = [],
   searchKeywords = [],
-  maxChannels = 10,
-  maxVideosPerChannel = 20,
+  maxChannels = 1,
+  maxVideosPerChannel = 1,
   includeShorts = false,
   proxyConfiguration: proxyConfig,
 } = input;

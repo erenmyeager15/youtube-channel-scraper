@@ -1,13 +1,13 @@
 {
-  "title": "YouTube Channel Scraper — Extract Analytics & Video Data",
-  "description": "Scrape YouTube channels and their latest videos for analytics data. Accepts channel URLs, handles (@name), or search keywords.",
+  "title": "YouTube Channel Scraper: Public Stats & Latest Videos",
+  "description": "Scrape public YouTube channel stats and latest-video summaries. Accepts channel URLs, @handles, or search keywords.",
   "type": "object",
   "schemaVersion": 1,
   "required": [],
   "properties": {
     "channelUrls": {
       "title": "Channel URLs",
-      "description": "List of YouTube channel URLs or handles to scrape (e.g. https://www.youtube.com/@mkbhd or @mkbhd)",
+      "description": "YouTube channel URLs or @handles to scrape, for example https://www.youtube.com/@mkbhd or @mkbhd.",
       "type": "array",
       "editor": "stringList",
       "default": ["https://www.youtube.com/@mkbhd"],
@@ -17,7 +17,7 @@
     },
     "searchKeywords": {
       "title": "Search Keywords",
-      "description": "Keywords to search YouTube for channels. Results will be scraped automatically.",
+      "description": "Optional keywords used to find public YouTube channels. Search results vary by region and ranking.",
       "type": "array",
       "editor": "stringList",
       "prefill": [],
@@ -26,32 +26,32 @@
     },
     "maxChannels": {
       "title": "Max Channels from Search",
-      "description": "Maximum number of channels to scrape from each search keyword",
+      "description": "Maximum number of channels to scrape from each search keyword.",
       "type": "integer",
       "minimum": 1,
       "maximum": 50,
-      "default": 10,
+      "default": 1,
       "editor": "number"
     },
     "maxVideosPerChannel": {
       "title": "Max Videos Per Channel",
-      "description": "Number of latest videos to scrape per channel (max 100)",
+      "description": "Number of latest public videos to scrape per channel.",
       "type": "integer",
       "minimum": 1,
       "maximum": 100,
-      "default": 10,
+      "default": 1,
       "editor": "number"
     },
     "includeShorts": {
       "title": "Include Shorts",
-      "description": "Whether to include YouTube Shorts in video scraping",
+      "description": "Include videos detected as YouTube Shorts.",
       "type": "boolean",
       "default": false,
       "editor": "checkbox"
     },
     "proxyConfiguration": {
       "title": "Proxy Configuration",
-      "description": "Proxy settings for the crawler. Datacenter proxies work well for YouTube.",
+      "description": "Proxy settings for browser requests. The default Apify Proxy configuration is recommended.",
       "type": "object",
       "editor": "proxy",
       "default": {
