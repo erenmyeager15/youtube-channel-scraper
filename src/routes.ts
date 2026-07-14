@@ -1,159 +1,168 @@
-import { PlaywrightCrawlingContext } from 'crawlee';
 import { Actor } from 'apify';
-import { ChannelRecord, VideoRecord, ChannelUserData, SearchUserData } from './types.js';
+import type { PlaywrightCrawlingContext } from 'crawlee';
+
+import { normalizeYouTubeChannelUrl } from './run-config.js';
+import type { ChannelRecord, ChannelUserData, SearchUserData, VideoRecord } from './types.js';
+import {
+  classifyYouTubeDocument,
+  detectShorts,
+  formatDuration,
+  parseCompactCount,
+  parseDurationToSeconds,
+  redactContactInfo,
+  truncate,
+} from './youtube-utils.js';
 
 const CHANNEL_SCRAPED_EVENT = 'channel-scraped';
 
 let chargedChannelCount = 0;
 let savedVideoCount = 0;
+let confirmedEmptySearchCount = 0;
 let spendingLimitReached = false;
+const activeOrSavedChannelKeys = new Set<string>();
 
 export function getScrapeState() {
   return {
     chargedChannelCount,
     savedVideoCount,
+    confirmedEmptySearchCount,
     spendingLimitReached,
   };
 }
 
 function randomDelay(min = 500, max = 1500): Promise<void> {
-  const ms = Math.floor(Math.random() * (max - min + 1)) + min;
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  const milliseconds = Math.floor(Math.random() * (max - min + 1)) + min;
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function parseIntSafe(text: string | null): number | null {
-  if (!text) return null;
-  // Match the first number with an optional K/M/B suffix, ignoring trailing words
-  // like "subscribers" (whose 'b' must not be read as a billions suffix).
-  const m = text.replace(/,/g, '').match(/([\d.]+)\s*([KMB])?/i);
-  if (!m) return null;
-  let num = parseFloat(m[1]);
-  if (isNaN(num)) return null;
-  const suffix = (m[2] || '').toUpperCase();
-  if (suffix === 'B') num *= 1_000_000_000;
-  else if (suffix === 'M') num *= 1_000_000;
-  else if (suffix === 'K') num *= 1_000;
-  return Math.round(num);
-}
-
-function parseDurationToSeconds(text: string | null): number | null {
-  if (!text) return null;
-  const parts = text.split(':').map(Number);
-  if (parts.some(isNaN)) return null;
-  if (parts.length === 3) {
-    return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  }
-  if (parts.length === 2) {
-    return parts[0] * 60 + parts[1];
-  }
-  if (parts.length === 1) {
-    return parts[0];
-  }
-  return null;
-}
-
-function formatDuration(seconds: number | null): string | null {
-  if (seconds === null) return null;
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  if (h > 0) {
-    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  }
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-function truncate(text: string | null, maxLen: number): string | null {
-  if (!text) return null;
-  return text.length > maxLen ? text.substring(0, maxLen) + '...' : text;
-}
-
-function redactContactInfo(text: string | null): string | null {
-  if (!text) return null;
-  return text
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted]')
-    .replace(/(?:\+?\d[\s().-]?){8,}\d/g, '[redacted]');
-}
-
-function extractNumber(text: string | null): number | null {
-  if (!text) return null;
-  const match = text.replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
-  if (!match) return null;
-  const num = parseFloat(match[1]);
-  return isNaN(num) ? null : num;
+async function inspectDocument(page: PlaywrightCrawlingContext['page']) {
+  const title = await page.title().catch(() => '');
+  const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
+  const hasCaptcha = await page
+    .locator('iframe[src*="recaptcha"], form[action*="/sorry/"], #captcha-form')
+    .count()
+    .then((count) => count > 0)
+    .catch(() => false);
+  return classifyYouTubeDocument(title, bodyText.slice(0, 50_000), hasCaptcha);
 }
 
 export async function channelHandler(context: PlaywrightCrawlingContext): Promise<void> {
   const { page, request, log, session } = context;
   const { channelUrl, maxVideos, includeShorts } = request.userData as ChannelUserData;
+  let reservedChannelKey: string | null = null;
+  let channelWasSaved = false;
 
   if (spendingLimitReached) {
     request.noRetry = true;
-    throw new Error('Charge limit already reached; stopping before scraping another YouTube channel.');
+    log.info(`Skipping ${channelUrl} because the user spending limit has been reached.`);
+    return;
   }
 
   log.info(`Scraping channel: ${channelUrl}`);
 
   try {
     await randomDelay();
-    await page.goto(channelUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForFunction(() => !!(window as unknown as { ytInitialData?: unknown }).ytInitialData, { timeout: 15000 }).catch(() => {});
-    await randomDelay(800, 2000);
+    await page.goto(channelUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await page
+      .waitForFunction(() => Boolean((window as unknown as { ytInitialData?: unknown }).ytInitialData), { timeout: 15_000 })
+      .catch(() => undefined);
+    await randomDelay(800, 1800);
 
-    // YouTube embeds all channel data in window.ytInitialData, which is more reliable
-    // than the volatile DOM selectors.
+    const documentState = await inspectDocument(page);
+    if (documentState === 'blocked') {
+      session?.retire();
+      throw new Error(`YouTube blocked the channel request for ${channelUrl}`);
+    }
+    if (documentState === 'unavailable') {
+      request.noRetry = true;
+      throw new Error(`YouTube channel is unavailable: ${channelUrl}`);
+    }
+
     const channelData = await page.evaluate(() => {
       /* eslint-disable @typescript-eslint/no-explicit-any */
-      const yt: any = (window as any).ytInitialData;
-      const meta = yt?.metadata?.channelMetadataRenderer ?? {};
-      const c4 = yt?.header?.c4TabbedHeaderRenderer ?? {};
-      const ph = yt?.header?.pageHeaderRenderer?.content?.pageHeaderViewModel ?? {};
+      const initialData: any = (window as any).ytInitialData;
+      const metadata = initialData?.metadata?.channelMetadataRenderer ?? {};
+      const legacyHeader = initialData?.header?.c4TabbedHeaderRenderer ?? {};
+      const pageHeader = initialData?.header?.pageHeaderRenderer?.content?.pageHeaderViewModel ?? {};
 
-      const title: string | null = meta.title ?? c4.title ?? null;
-      const description: string | null = meta.description ?? null;
+      const title: string | null = metadata.title ?? legacyHeader.title ?? null;
+      const description: string | null = metadata.description ?? null;
       const handle: string | null =
-        c4.channelHandleText?.runs?.[0]?.text ??
-        (meta.vanityChannelUrl ? `@${String(meta.vanityChannelUrl).split('/@')[1] ?? ''}` : null);
+        legacyHeader.channelHandleText?.runs?.[0]?.text
+        ?? (metadata.vanityChannelUrl ? `@${String(metadata.vanityChannelUrl).split('/@')[1] ?? ''}` : null);
 
-      const avatarArr = meta.avatar?.thumbnails ?? c4.avatar?.thumbnails ?? [];
-      const avatarUrl: string | null = avatarArr.length ? avatarArr[avatarArr.length - 1].url : null;
-      const bannerArr = c4.banner?.thumbnails ?? [];
-      const bannerUrl: string | null = bannerArr.length ? bannerArr[bannerArr.length - 1].url : null;
+      const avatars = metadata.avatar?.thumbnails ?? legacyHeader.avatar?.thumbnails ?? [];
+      const avatarUrl: string | null = avatars.length ? avatars[avatars.length - 1].url : null;
+      const banners = legacyHeader.banner?.thumbnails ?? [];
+      const bannerUrl: string | null = banners.length ? banners[banners.length - 1].url : null;
 
-      let subscriberText: string | null = c4.subscriberCountText?.simpleText ?? null;
-      let videoCountText: string | null = c4.videosCountText?.runs?.map((r: any) => r.text).join('') ?? null;
+      let subscriberText: string | null = legacyHeader.subscriberCountText?.simpleText ?? null;
+      let videoCountText: string | null = legacyHeader.videosCountText?.runs?.map((run: any) => run.text).join('') ?? null;
 
-      // Newer page-header layout stores counts in metadata rows.
       if (!subscriberText || !videoCountText) {
-        const rows = ph?.metadata?.contentMetadataViewModel?.metadataRows ?? [];
+        const rows = pageHeader?.metadata?.contentMetadataViewModel?.metadataRows ?? [];
         for (const row of rows) {
           for (const part of row.metadataParts ?? []) {
-            const t: string = part.text?.content ?? '';
-            if (/subscriber/i.test(t) && !subscriberText) subscriberText = t;
-            else if (/video/i.test(t) && !videoCountText) videoCountText = t;
+            const text: string = part.text?.content ?? '';
+            if (/subscriber/i.test(text) && !subscriberText) subscriberText = text;
+            else if (/video/i.test(text) && !videoCountText) videoCountText = text;
           }
         }
       }
 
-      const headerBlob = JSON.stringify(c4.badges ?? []) + JSON.stringify(ph?.title ?? '');
-      const isVerified = /verified|official artist/i.test(headerBlob);
+      const badgeText = `${JSON.stringify(legacyHeader.badges ?? [])}${JSON.stringify(pageHeader?.title ?? '')}`;
+      const isVerified = /verified|official artist/i.test(badgeText);
+      const externalId: string | null = metadata.externalId ?? legacyHeader.channelId ?? null;
+      const canonicalUrl: string | null = metadata.channelUrl
+        ?? (externalId ? `https://www.youtube.com/channel/${externalId}` : null);
 
-      return { title, description, handle, avatarUrl, bannerUrl, subscriberText, videoCountText, isVerified };
+      return {
+        title,
+        description,
+        handle,
+        avatarUrl,
+        bannerUrl,
+        subscriberText,
+        videoCountText,
+        isVerified,
+        externalId,
+        canonicalUrl,
+      };
     });
 
-    const subscriberCountNumber = parseIntSafe(channelData.subscriberText);
-    const totalVideoCountNumber = parseIntSafe(channelData.videoCountText);
+    if (!channelData.title && parseCompactCount(channelData.subscriberText) === null) {
+      session?.retire();
+      throw new Error(`No channel metadata was extracted for ${channelUrl}; the page may be blocked or changed.`);
+    }
+
+    let canonicalChannelUrl = channelUrl;
+    if (channelData.canonicalUrl) {
+      try {
+        canonicalChannelUrl = normalizeYouTubeChannelUrl(channelData.canonicalUrl);
+      } catch {
+        log.debug(`Ignoring malformed canonical channel URL from YouTube: ${channelData.canonicalUrl}`);
+      }
+    }
+    const channelKey = (channelData.externalId ?? channelData.handle ?? canonicalChannelUrl).toLowerCase();
+    if (activeOrSavedChannelKeys.has(channelKey)) {
+      request.noRetry = true;
+      log.info(`Skipping duplicate YouTube channel: ${canonicalChannelUrl}`);
+      session?.retire();
+      return;
+    }
+    activeOrSavedChannelKeys.add(channelKey);
+    reservedChannelKey = channelKey;
 
     const channelRecord: ChannelRecord = {
-      channelUrl,
+      channelUrl: canonicalChannelUrl,
       channelName: channelData.title,
       handle: channelData.handle,
       subscriberCount: channelData.subscriberText,
-      subscriberCountNumber,
+      subscriberCountNumber: parseCompactCount(channelData.subscriberText),
       totalViews: null,
       totalViewsNumber: null,
       totalVideoCount: channelData.videoCountText,
-      totalVideoCountNumber,
+      totalVideoCountNumber: parseCompactCount(channelData.videoCountText),
       joinDate: null,
       country: null,
       channelDescription: redactContactInfo(truncate(channelData.description, 2000)),
@@ -165,274 +174,210 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
       scrapedAt: new Date().toISOString(),
     };
 
-    // Only push + charge when we actually identified the channel.
-    if (!channelRecord.channelName && channelRecord.subscriberCountNumber === null) {
-      log.warning(`No channel data extracted for ${channelUrl} (blocked or layout changed). Not saving or charging.`);
-      session?.retire();
-      throw new Error(`No channel data extracted for ${channelUrl}`);
-    }
+    const videoRecords = await collectLatestVideos(
+      context,
+      canonicalChannelUrl,
+      channelRecord.channelName,
+      maxVideos,
+      includeShorts,
+    );
 
-    const charge = await Actor.pushData(channelRecord, CHANNEL_SCRAPED_EVENT);
-    const recordWasSaved = charge.chargedCount > 0 || !charge.eventChargeLimitReached;
+    const chargeResult = await Actor.pushData(channelRecord, CHANNEL_SCRAPED_EVENT);
+    const recordWasSaved = chargeResult.chargedCount > 0 || !chargeResult.eventChargeLimitReached;
     if (!recordWasSaved) {
       spendingLimitReached = true;
       request.noRetry = true;
-      log.warning(`Charge limit reached for ${CHANNEL_SCRAPED_EVENT}; no more channel work will be saved.`);
-      throw new Error(`Charge limit reached for ${CHANNEL_SCRAPED_EVENT}`);
-    }
-    chargedChannelCount += 1;
-    log.info(`Saved channel row: ${channelRecord.channelName || channelUrl} (${channelRecord.subscriberCount ?? '?'} subs)`);
-
-    if (charge.eventChargeLimitReached) {
-      spendingLimitReached = true;
-      request.noRetry = true;
+      activeOrSavedChannelKeys.delete(channelKey);
+      reservedChannelKey = null;
+      log.warning(`Charge limit reached for ${CHANNEL_SCRAPED_EVENT}; the channel was not saved.`);
       session?.retire();
-      log.warning('Charge limit reached after saving the current channel; stopping before videos or other channel work.');
       return;
     }
 
-    // Videos: parse the /videos tab ytInitialData grid (no per-video navigation).
-    if ((maxVideos ?? 0) > 0) {
-      const videosTabUrl = channelUrl.endsWith('/') ? `${channelUrl}videos` : `${channelUrl}/videos`;
-      await page.goto(videosTabUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForFunction(() => !!(window as unknown as { ytInitialData?: unknown }).ytInitialData, { timeout: 15000 }).catch(() => {});
-      await randomDelay(800, 1500);
+    channelWasSaved = true;
+    chargedChannelCount += 1;
+    log.info(`Saved channel row: ${channelRecord.channelName ?? canonicalChannelUrl}`);
 
-      const videos = await page.evaluate(() => {
-        /* eslint-disable @typescript-eslint/no-explicit-any */
-        const yt: any = (window as any).ytInitialData;
-        const out: Array<{ videoId: string; title: string | null; viewText: string | null; publishedText: string | null; lengthText: string | null; thumb: string | null }> = [];
-        const seen = new Set<string>();
+    if (videoRecords.length > 0) {
+      try {
+        await Actor.pushData(videoRecords);
+        savedVideoCount += videoRecords.length;
+        log.info(`Saved ${videoRecords.length} latest-video row(s) for ${channelRecord.channelName ?? canonicalChannelUrl}`);
+      } catch (error) {
+        log.warning(`Channel metadata was saved, but its video rows could not be stored: ${String(error)}`);
+      }
+    }
 
-        const deepText = (obj: any, test: RegExp): string | null => {
-          let result: string | null = null;
-          const dig = (o: any): void => {
-            if (result || !o || typeof o !== 'object') return;
-            if (typeof o.text === 'string' && test.test(o.text)) { result = o.text; return; }
-            if (typeof o.content === 'string' && test.test(o.content)) { result = o.content; return; }
-            for (const k in o) dig(o[k]);
-          };
-          dig(obj);
-          return result;
+    if (chargeResult.eventChargeLimitReached) {
+      spendingLimitReached = true;
+      request.noRetry = true;
+      log.warning('The user spending limit was reached after saving the current channel and its available video rows.');
+    }
+
+    session?.retire();
+  } catch (error) {
+    if (reservedChannelKey && !channelWasSaved) activeOrSavedChannelKeys.delete(reservedChannelKey);
+    log.error(`Error scraping channel ${channelUrl}: ${String(error)}`);
+    session?.retire();
+    throw error;
+  }
+}
+
+async function collectLatestVideos(
+  context: PlaywrightCrawlingContext,
+  channelUrl: string,
+  channelName: string | null,
+  maxVideos: number,
+  includeShorts: boolean,
+): Promise<VideoRecord[]> {
+  if (maxVideos < 1) return [];
+
+  const { page, log, session } = context;
+  const videosTabUrl = `${channelUrl.replace(/\/$/, '')}/videos`;
+
+  try {
+    await page.goto(videosTabUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await page
+      .waitForFunction(() => Boolean((window as unknown as { ytInitialData?: unknown }).ytInitialData), { timeout: 15_000 })
+      .catch(() => undefined);
+    await randomDelay(800, 1500);
+
+    const documentState = await inspectDocument(page);
+    if (documentState === 'blocked') {
+      session?.retire();
+      log.warning(`YouTube blocked the latest-video page for ${channelUrl}; saving channel metadata without videos.`);
+      return [];
+    }
+    if (documentState === 'unavailable' || documentState === 'no-results') return [];
+
+    const videos = await page.evaluate(() => {
+      /* eslint-disable @typescript-eslint/no-explicit-any */
+      const initialData: any = (window as any).ytInitialData;
+      const output: Array<{
+        videoId: string;
+        title: string | null;
+        viewText: string | null;
+        publishedText: string | null;
+        lengthText: string | null;
+        thumbnailUrl: string | null;
+        navigationUrl: string | null;
+      }> = [];
+      const seen = new Set<string>();
+
+      const findText = (object: any, pattern: RegExp): string | null => {
+        let result: string | null = null;
+        const visit = (value: any): void => {
+          if (result || !value || typeof value !== 'object') return;
+          if (typeof value.text === 'string' && pattern.test(value.text)) result = value.text;
+          else if (typeof value.content === 'string' && pattern.test(value.content)) result = value.content;
+          else for (const child of Object.values(value)) visit(child);
         };
+        visit(object);
+        return result;
+      };
 
-        const walk = (obj: any): void => {
-          if (!obj || typeof obj !== 'object') return;
-
-          // Legacy videoRenderer
-          const vr = obj.videoRenderer;
-          if (vr?.videoId && !seen.has(vr.videoId)) {
-            seen.add(vr.videoId);
-            const thumbs = vr.thumbnail?.thumbnails ?? [];
-            out.push({
-              videoId: vr.videoId,
-              title: vr.title?.runs?.[0]?.text ?? null,
-              viewText: vr.viewCountText?.simpleText ?? (vr.viewCountText?.runs?.map((r: any) => r.text).join('') ?? null),
-              publishedText: vr.publishedTimeText?.simpleText ?? null,
-              lengthText: vr.lengthText?.simpleText ?? null,
-              thumb: thumbs.length ? thumbs[thumbs.length - 1].url : null,
-            });
-          }
-
-          // Newer lockupViewModel (current channel video grids)
-          const lvm = obj.lockupViewModel;
-          if (lvm?.contentId && /VIDEO/i.test(lvm.contentType ?? '') && !seen.has(lvm.contentId)) {
-            seen.add(lvm.contentId);
-            const md = lvm.metadata?.lockupMetadataViewModel;
-            const title = md?.title?.content ?? null;
-            const rows = md?.metadata?.contentMetadataViewModel?.metadataRows ?? [];
-            let viewText: string | null = null;
-            let publishedText: string | null = null;
-            for (const row of rows) {
-              for (const part of row.metadataParts ?? []) {
-                const t: string = part.text?.content ?? '';
-                if (/view/i.test(t) && !viewText) viewText = t;
-                else if (/(ago|stream|premiere)/i.test(t) && !publishedText) publishedText = t;
-              }
+      const findNavigationUrl = (object: any, videoId: string): string | null => {
+        let fallback: string | null = null;
+        const visit = (value: any): string | null => {
+          if (!value || typeof value !== 'object') return null;
+          for (const [key, child] of Object.entries(value)) {
+            if (typeof child === 'string' && /url/i.test(key)) {
+              if (child.includes(`/shorts/${videoId}`)) return child;
+              if (child.includes(`/watch?v=${videoId}`)) fallback = child;
+            } else if (child && typeof child === 'object') {
+              const found = visit(child);
+              if (found) return found;
             }
-            const lengthText = deepText(lvm.contentImage, /^\d{1,2}:\d{2}(:\d{2})?$/);
-            const sources = lvm.contentImage?.thumbnailViewModel?.image?.sources ?? [];
-            out.push({
-              videoId: lvm.contentId,
-              title,
-              viewText,
-              publishedText,
-              lengthText,
-              thumb: sources.length ? sources[sources.length - 1].url : null,
-            });
           }
-
-          for (const k in obj) walk(obj[k]);
+          return null;
         };
+        return visit(object) ?? fallback;
+      };
 
-        walk(yt);
-        return out;
-      });
+      const walk = (object: any): void => {
+        if (!object || typeof object !== 'object') return;
 
-      const limited = videos.slice(0, Math.min(maxVideos, 100));
-      log.info(`Found ${limited.length} videos for ${channelRecord.channelName || channelUrl}`);
+        const videoRenderer = object.videoRenderer;
+        if (videoRenderer?.videoId && !seen.has(videoRenderer.videoId)) {
+          seen.add(videoRenderer.videoId);
+          const thumbnails = videoRenderer.thumbnail?.thumbnails ?? [];
+          output.push({
+            videoId: videoRenderer.videoId,
+            title: videoRenderer.title?.runs?.[0]?.text ?? null,
+            viewText: videoRenderer.viewCountText?.simpleText
+              ?? videoRenderer.viewCountText?.runs?.map((run: any) => run.text).join('')
+              ?? null,
+            publishedText: videoRenderer.publishedTimeText?.simpleText ?? null,
+            lengthText: videoRenderer.lengthText?.simpleText ?? null,
+            thumbnailUrl: thumbnails.length ? thumbnails[thumbnails.length - 1].url : null,
+            navigationUrl: findNavigationUrl(videoRenderer, videoRenderer.videoId),
+          });
+        }
 
-      for (const v of limited) {
-        const durationSeconds = parseDurationToSeconds(v.lengthText);
-        const isShorts = durationSeconds !== null && durationSeconds <= 60;
-        if (!includeShorts && isShorts) continue;
+        const lockup = object.lockupViewModel;
+        if (lockup?.contentId && /VIDEO/i.test(lockup.contentType ?? '') && !seen.has(lockup.contentId)) {
+          seen.add(lockup.contentId);
+          const metadata = lockup.metadata?.lockupMetadataViewModel;
+          const rows = metadata?.metadata?.contentMetadataViewModel?.metadataRows ?? [];
+          let viewText: string | null = null;
+          let publishedText: string | null = null;
+          for (const row of rows) {
+            for (const part of row.metadataParts ?? []) {
+              const text: string = part.text?.content ?? '';
+              if (/view/i.test(text) && !viewText) viewText = text;
+              else if (/(ago|stream|premiere)/i.test(text) && !publishedText) publishedText = text;
+            }
+          }
+          const thumbnailSources = lockup.contentImage?.thumbnailViewModel?.image?.sources ?? [];
+          output.push({
+            videoId: lockup.contentId,
+            title: metadata?.title?.content ?? null,
+            viewText,
+            publishedText,
+            lengthText: findText(lockup.contentImage, /^\d{1,2}:\d{2}(?::\d{2})?$/),
+            thumbnailUrl: thumbnailSources.length ? thumbnailSources[thumbnailSources.length - 1].url : null,
+            navigationUrl: findNavigationUrl(lockup, lockup.contentId),
+          });
+        }
 
-        const videoRecord: VideoRecord = {
+        for (const child of Object.values(object)) walk(child);
+      };
+
+      walk(initialData);
+      return output;
+    });
+
+    return videos
+      .map((video): VideoRecord => {
+        const durationSeconds = parseDurationToSeconds(video.lengthText);
+        const isShorts = detectShorts(video.navigationUrl, durationSeconds);
+        return {
           channelUrl,
-          channelName: channelRecord.channelName,
-          videoUrl: `https://www.youtube.com/watch?v=${v.videoId}`,
-          videoTitle: v.title,
-          viewCount: v.viewText,
-          viewCountNumber: parseIntSafe(v.viewText),
+          channelName,
+          videoUrl: `https://www.youtube.com/watch?v=${video.videoId}`,
+          videoTitle: video.title,
+          viewCount: video.viewText,
+          viewCountNumber: parseCompactCount(video.viewText),
           likeCount: null,
           likeCountNumber: null,
           commentCount: null,
           commentCountNumber: null,
           durationSeconds,
           durationFormatted: formatDuration(durationSeconds),
-          publishedDate: v.publishedText,
-          thumbnailUrl: v.thumb,
+          publishedDate: video.publishedText,
+          thumbnailUrl: video.thumbnailUrl,
           videoDescription: null,
           tags: [],
           category: null,
           isShorts,
           scrapedAt: new Date().toISOString(),
         };
-        await Actor.pushData(videoRecord);
-        savedVideoCount += 1;
-      }
-    }
-
-    session?.retire();
+      })
+      .filter((video) => includeShorts || !video.isShorts)
+      .slice(0, maxVideos);
   } catch (error) {
-    log.error(`Error scraping channel ${channelUrl}: ${error}`);
-    session?.retire();
-    throw error;
-  }
-}
-
-async function scrapeVideo(
-  context: PlaywrightCrawlingContext,
-  videoUrl: string,
-  channelUrl: string,
-  channelName: string | null,
-  isShort: boolean,
-): Promise<void> {
-  const { page, log } = context;
-
-  try {
-    await randomDelay();
-    await page.goto(videoUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForSelector('#info-text, ytd-video-primary-info-renderer, ytd-watch-metadata', { timeout: 15000 }).catch(() => {});
-    await randomDelay(800, 2000);
-
-    const videoData = await page.evaluate(() => {
-      const getText = (sel: string): string | null => {
-        const el = document.querySelector(sel);
-        return el?.textContent?.trim() || null;
-      };
-
-      const getAttr = (sel: string, attr: string): string | null => {
-        const el = document.querySelector(sel);
-        return el?.getAttribute(attr) || null;
-      };
-
-      const title = getText('yt-formatted-string.style-scope.ytd-watch-metadata') ||
-        document.querySelector('meta[name="title"]')?.getAttribute('content') ||
-        getText('h1.title yt-formatted-string') || null;
-
-      const viewText = getText('#info-text span') ||
-        document.querySelector('meta[itemprop="interactionCount"]')?.getAttribute('content') ||
-        getText('ytd-video-primary-info-renderer #info-text span:first-child') || null;
-
-      const likeCountBtn = document.querySelector('#segmented-like-button button') ||
-        document.querySelector('like-button-view-model button');
-      const likeCountText = likeCountBtn?.getAttribute('aria-label') ||
-        getText('#top-level-buttons-computed button button-text') ||
-        getText('like-button-view-model button') || null;
-
-      const commentCountText = getText('#count .count-text') ||
-        getText('#count yt-formatted-string span') ||
-        getText('ytd-comments-header-renderer #count yt-formatted-string') || null;
-
-      const durationMeta = document.querySelector('meta[itemprop="duration"]')?.getAttribute('content') || null;
-      const durationDisplay = getText('.ytp-time-duration') || null;
-      const durationText = durationDisplay || durationMeta;
-
-      const publishedText = getText('#info-strings yt-formatted-string') ||
-        getText('ytd-video-primary-info-renderer #info-strings span') ||
-        document.querySelector('meta[itemprop="uploadDate"]')?.getAttribute('content') ||
-        document.querySelector('meta[itemprop="datePublished"]')?.getAttribute('content') || null;
-
-      const thumbnailUrl = document.querySelector('meta[property="og:image"]')?.getAttribute('content') || null;
-
-      const description = getText('#description-inner, #description yt-formatted-string') ||
-        document.querySelector('meta[name="description"]')?.getAttribute('content') || null;
-
-      const tagElements = document.querySelectorAll('meta[name="keywords"]');
-      const tags = tagElements.length > 0
-        ? Array.from(tagElements).flatMap(m => (m.getAttribute('content') || '').split(',').map(t => t.trim())).filter(Boolean)
-        : [];
-
-      const category = document.querySelector('meta[itemprop="genre"]')?.getAttribute('content') || null;
-
-      return {
-        title,
-        viewText,
-        likeCountText,
-        commentCountText,
-        durationText,
-        durationMeta,
-        publishedText,
-        thumbnailUrl,
-        description,
-        tags,
-        category,
-      };
-    });
-
-    let durationSeconds = parseDurationToSeconds(videoData.durationText);
-    if (durationSeconds === null && videoData.durationMeta) {
-      const match = videoData.durationMeta.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-      if (match) {
-        const h = parseInt(match[1] || '0');
-        const m = parseInt(match[2] || '0');
-        const s = parseInt(match[3] || '0');
-        durationSeconds = h * 3600 + m * 60 + s;
-      }
-    }
-
-    const viewCountNumber = parseIntSafe(videoData.viewText);
-    const likeCountNumber = extractNumber(videoData.likeCountText);
-    const commentCountNumber = parseIntSafe(videoData.commentCountText);
-
-    const videoRecord: VideoRecord = {
-      channelUrl,
-      channelName,
-      videoUrl,
-      videoTitle: videoData.title,
-      viewCount: videoData.viewText || null,
-      viewCountNumber,
-      likeCount: videoData.likeCountText?.replace(/[^\d.KkMmBb,]/g, '') || null,
-      likeCountNumber,
-      commentCount: videoData.commentCountText || null,
-      commentCountNumber,
-      durationSeconds,
-      durationFormatted: formatDuration(durationSeconds),
-      publishedDate: videoData.publishedText || null,
-      thumbnailUrl: videoData.thumbnailUrl,
-      videoDescription: redactContactInfo(truncate(videoData.description, 500)),
-      tags: videoData.tags,
-      category: videoData.category,
-      isShorts: isShort,
-      scrapedAt: new Date().toISOString(),
-    };
-
-    await Actor.pushData(videoRecord);
-    savedVideoCount += 1;
-    log.debug(`Video pushed: ${videoRecord.videoTitle || videoUrl}`);
-  } catch (error) {
-    log.warning(`Error scraping video ${videoUrl}: ${error}`);
+    log.warning(`Could not collect latest videos for ${channelUrl}; saving channel metadata only: ${String(error)}`);
+    return [];
   }
 }
 
@@ -443,68 +388,97 @@ export async function searchHandler(context: PlaywrightCrawlingContext): Promise
 
   if (spendingLimitReached) {
     request.noRetry = true;
-    throw new Error('Charge limit already reached; stopping before searching more YouTube channels.');
+    log.info(`Skipping search "${keyword}" because the user spending limit has been reached.`);
+    return;
   }
 
-  log.info(`Searching YouTube for: ${keyword}`);
+  log.info(`Searching YouTube for channels matching: ${keyword}`);
 
   try {
-    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(keyword)}&sp=EgIQAg%3D%3D`;
     await randomDelay();
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForSelector('ytd-video-renderer, ytd-channel-renderer', { timeout: 15000 }).catch(() => {});
-    await randomDelay(1000, 2000);
+    await page.goto(request.url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await page
+      .waitForFunction(() => Boolean((window as unknown as { ytInitialData?: unknown }).ytInitialData), { timeout: 15_000 })
+      .catch(() => undefined);
+    await randomDelay(800, 1600);
 
-    const channelUrls = await page.evaluate((max: number) => {
-      const channels = new Set<string>();
-      const channelRenderers = document.querySelectorAll('ytd-channel-renderer');
-      const allRenderers = document.querySelectorAll('ytd-video-renderer, ytd-channel-renderer');
+    const documentState = await inspectDocument(page);
+    if (documentState === 'blocked') {
+      session?.retire();
+      throw new Error(`YouTube blocked the channel search for "${keyword}"`);
+    }
+    if (documentState === 'no-results') {
+      confirmedEmptySearchCount += 1;
+      request.noRetry = true;
+      log.info(`YouTube returned no channel matches for "${keyword}".`);
+      session?.retire();
+      return;
+    }
 
-      for (const renderer of allRenderers) {
-        if (channels.size >= max) break;
-        const link = renderer.querySelector('a#main-link, a#avatar-button, a.yt-simple-endpoint');
-        const href = link?.getAttribute('href');
-        if (href && href.includes('/@')) {
-          const cleanUrl = href.split('?')[0];
-          channels.add(`https://www.youtube.com${cleanUrl}`);
+    const discoveredUrls = await page.evaluate((maximum: number) => {
+      /* eslint-disable @typescript-eslint/no-explicit-any */
+      const initialData: any = (window as any).ytInitialData;
+      const urls = new Set<string>();
+
+      const addUrl = (rawUrl: unknown): void => {
+        if (urls.size >= maximum || typeof rawUrl !== 'string') return;
+        if (!/^\/(?:@|channel\/|c\/|user\/)/i.test(rawUrl)) return;
+        const cleanPath = rawUrl.split(/[?#]/)[0];
+        urls.add(`https://www.youtube.com${cleanPath}`);
+      };
+
+      const walk = (object: any): void => {
+        if (!object || typeof object !== 'object' || urls.size >= maximum) return;
+        const channel = object.channelRenderer;
+        if (channel) {
+          addUrl(channel.navigationEndpoint?.commandMetadata?.webCommandMetadata?.url);
+          if (channel.channelId) addUrl(`/channel/${channel.channelId}`);
         }
-      }
-
-      for (const renderer of channelRenderers) {
-        if (channels.size >= max) break;
-        const link = renderer.querySelector('a#main-link, a.yt-simple-endpoint');
-        const href = link?.getAttribute('href');
-        if (href && href.includes('/@')) {
-          const cleanUrl = href.split('?')[0];
-          channels.add(`https://www.youtube.com${cleanUrl}`);
+        for (const [key, child] of Object.entries(object)) {
+          if (typeof child === 'string' && /(?:url|canonicalBaseUrl)/i.test(key)) addUrl(child);
+          else if (child && typeof child === 'object') walk(child);
         }
+      };
+
+      walk(initialData);
+
+      for (const link of document.querySelectorAll('ytd-channel-renderer a[href], a#main-link[href]')) {
+        addUrl(link.getAttribute('href'));
+        if (urls.size >= maximum) break;
       }
+      return [...urls];
+    }, maxChannels);
 
-      return Array.from(channels);
-    }, maxChannels || 10);
-
-    log.info(`Found ${channelUrls.length} channels from search: "${keyword}"`);
+    const channelUrls: string[] = [];
+    for (const rawUrl of discoveredUrls) {
+      try {
+        const normalizedUrl = normalizeYouTubeChannelUrl(rawUrl);
+        if (!channelUrls.includes(normalizedUrl)) channelUrls.push(normalizedUrl);
+      } catch {
+        // Ignore non-channel navigation URLs found in YouTube's generic page payload.
+      }
+      if (channelUrls.length >= maxChannels) break;
+    }
 
     if (channelUrls.length === 0) {
-      request.noRetry = true;
-      throw new Error(`No YouTube channels found for search keyword: "${keyword}"`);
+      session?.retire();
+      throw new Error(`The YouTube search page loaded but no channel URLs could be extracted for "${keyword}".`);
     }
 
-    for (const url of channelUrls) {
-      await context.addRequests([{
-        url,
-        userData: {
-          label: 'channel',
-          channelUrl: url,
-          maxVideos: searchData.maxVideosPerChannel,
-          includeShorts: searchData.includeShorts,
-        },
-      }]);
-    }
+    await context.addRequests(channelUrls.map((url) => ({
+      url,
+      userData: {
+        label: 'channel',
+        channelUrl: url,
+        maxVideos: searchData.maxVideosPerChannel,
+        includeShorts: searchData.includeShorts,
+      },
+    })));
 
+    log.info(`Queued ${channelUrls.length} channel(s) discovered for "${keyword}".`);
     session?.retire();
   } catch (error) {
-    log.error(`Error searching for "${keyword}": ${error}`);
+    log.error(`Error searching for "${keyword}": ${String(error)}`);
     session?.retire();
     throw error;
   }

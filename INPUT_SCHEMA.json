@@ -10,6 +10,7 @@
       "description": "YouTube channel URLs or @handles to scrape, for example https://www.youtube.com/@mkbhd or @mkbhd.",
       "type": "array",
       "editor": "stringList",
+      "maxItems": 50,
       "default": ["https://www.youtube.com/@mkbhd"],
       "prefill": ["https://www.youtube.com/@mkbhd"],
       "sectionCaption": "Channel Input",
@@ -20,6 +21,7 @@
       "description": "Optional keywords used to find public YouTube channels. Search results vary by region and ranking.",
       "type": "array",
       "editor": "stringList",
+      "maxItems": 10,
       "prefill": [],
       "sectionCaption": "Search Input",
       "sectionDescription": "Optional: search YouTube for channels by keyword."
@@ -35,7 +37,7 @@
     },
     "maxVideosPerChannel": {
       "title": "Max Videos Per Channel",
-      "description": "Number of latest public videos to scrape per channel.",
+      "description": "Maximum latest public video rows to save per channel from YouTube's currently loaded public Videos grid. Fewer may be available.",
       "type": "integer",
       "minimum": 1,
       "maximum": 100,
@@ -44,14 +46,14 @@
     },
     "includeShorts": {
       "title": "Include Shorts",
-      "description": "Include videos detected as YouTube Shorts.",
+      "description": "Include videos detected as YouTube Shorts. Detection prefers YouTube's /shorts/ route and uses duration only as a fallback.",
       "type": "boolean",
       "default": false,
       "editor": "checkbox"
     },
     "proxyConfiguration": {
       "title": "Proxy Configuration",
-      "description": "Proxy settings for browser requests. The default Apify Proxy configuration is recommended.",
+      "description": "Proxy settings for browser requests. Supports Apify Proxy, a two-letter proxy country, custom proxy URLs, or direct mode. Apify Proxy is enabled by default.",
       "type": "object",
       "editor": "proxy",
       "default": {

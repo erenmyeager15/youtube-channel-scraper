@@ -100,14 +100,14 @@ Counts, titles, thumbnails, and relative dates can change when YouTube updates t
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `channelUrls` | array | One sample channel | Full YouTube channel URLs or `@handles` |
-| `searchKeywords` | array | Empty | Optional keywords used to discover channels |
+| `channelUrls` | array | One sample channel | Up to 50 full YouTube channel URLs or `@handles` |
+| `searchKeywords` | array | Empty | Up to 10 optional keywords used to discover channels |
 | `maxChannels` | integer | `1` | Maximum channels scraped per search keyword, from 1 to 50 |
-| `maxVideosPerChannel` | integer | `1` | Latest videos requested per channel, from 1 to 100 |
-| `includeShorts` | boolean | `false` | Include videos detected as Shorts |
-| `proxyConfiguration` | object | Apify Proxy on | Proxy settings for browser requests |
+| `maxVideosPerChannel` | integer | `1` | Maximum latest rows saved from the currently loaded public Videos grid, from 1 to 100 |
+| `includeShorts` | boolean | `false` | Include videos detected as Shorts from YouTube routing, with duration used only as a fallback |
+| `proxyConfiguration` | object | Apify Proxy on | Apify Proxy, country, custom-proxy, or direct settings |
 
-Provide at least one channel URL, handle, or search keyword. Direct channel inputs are more predictable than keyword search. Search results vary by region and ranking.
+Provide at least one channel URL, handle, or search keyword. Direct channel inputs are more predictable than keyword search. Search results vary by region and ranking. A run handles at most 50 unique channel pages across direct and search-discovered inputs.
 
 ## Common workflows
 
@@ -134,19 +134,20 @@ This Actor uses Pay Per Event pricing.
 | Event | Price |
 | --- | ---: |
 | Actor start | $0.00005 per GB of memory |
-| Each successfully saved `channel-scraped` item | $0.005 |
+| Each successfully saved `channel-scraped` channel | $0.003 |
 
-The Actor is capped at 2 GB of memory, so the startup charge is approximately $0.00010 per run. Latest-video rows are included in the channel charge. A one-channel run is therefore approximately $0.00510 before any applicable account-level charges.
+The Actor is capped at 2 GB of memory, so the startup charge is approximately $0.00010 per run. Available latest-video rows are included in the channel charge. A one-channel run is therefore approximately $0.00310 before any applicable account-level charges.
 
-Failed channel extractions are not charged as `channel-scraped` events. The Actor stops accepting new channel work when the run reaches the user's maximum-cost limit.
+Failed channel extractions and duplicate channel aliases are not charged as `channel-scraped` events. When a maximum-cost limit is reached, the Actor finishes cleanly after storing the current paid channel and its available video rows, then skips queued channel work.
 
 ## Limits and reliability
 
 - YouTube changes its page structure regularly. Select fields may temporarily become unavailable.
 - Subscriber counts can be hidden or abbreviated.
 - Search results depend on region and YouTube ranking.
-- Large runs can encounter rate limits; begin with small batches.
-- Shorts detection uses the public duration shown in the channel grid and may not classify every edge case.
+- Runs are capped at 50 unique channel pages and three concurrent browser handlers. Begin with small batches to reduce rate limiting.
+- Shorts detection prefers YouTube's explicit `/shorts/` route. Duration is only a fallback because Shorts can now be up to three minutes and ordinary videos can be shorter than one minute.
+- If a channel page succeeds but its Videos tab is unavailable, the Actor saves and charges the channel metadata row without fabricating video rows.
 - Video likes, comments, tags, descriptions, and categories are currently emitted as nullable compatibility fields, not guaranteed analytics.
 - The Actor reads public pages only and does not access YouTube Studio, private analytics, account data, or private videos.
 

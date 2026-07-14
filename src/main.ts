@@ -2,26 +2,24 @@ import { Actor } from 'apify';
 import { PlaywrightCrawler, log } from 'crawlee';
 import { ActorInput } from './types.js';
 import { channelHandler, getScrapeState, searchHandler } from './routes.js';
+import { normalizeActorInput } from './run-config.js';
 
 await Actor.init();
 
 const input = await Actor.getInput<ActorInput>() ?? {};
-
+const normalizedInput = normalizeActorInput(input);
 const {
-  channelUrls = [],
-  searchKeywords = [],
-  maxChannels = 1,
-  maxVideosPerChannel = 1,
-  includeShorts = false,
-  proxyConfiguration: proxyConfig,
-} = input;
+  channelUrls,
+  searchKeywords,
+  maxChannels,
+  maxVideosPerChannel,
+  includeShorts,
+  proxyOptions,
+  maxRequestsPerCrawl,
+} = normalizedInput;
 
-const proxyConfiguration = proxyConfig
-  ? await Actor.createProxyConfiguration({
-      useApifyProxy: proxyConfig.useApifyProxy ?? true,
-      apifyProxyGroups: proxyConfig.apifyProxyGroups,
-      proxyUrls: proxyConfig.proxyUrls,
-    })
+const proxyConfiguration = proxyOptions
+  ? await Actor.createProxyConfiguration(proxyOptions)
   : undefined;
 
 let failedRequestCount = 0;
@@ -30,6 +28,7 @@ const crawler = new PlaywrightCrawler({
   proxyConfiguration,
   maxConcurrency: 3,
   minConcurrency: 1,
+  maxRequestsPerCrawl,
   requestHandlerTimeoutSecs: 300,
   sessionPoolOptions: {
     maxPoolSize: 50,
@@ -40,7 +39,8 @@ const crawler = new PlaywrightCrawler({
   requestHandler: async (context) => {
     if (getScrapeState().spendingLimitReached) {
       context.request.noRetry = true;
-      throw new Error('Charge limit reached; stopping remaining YouTube requests.');
+      context.log.info('Skipping queued YouTube request because the user spending limit has been reached.');
+      return;
     }
 
     const label = context.request.userData['label'] as string | undefined;
@@ -64,17 +64,7 @@ const requests: Array<{
   userData: Record<string, unknown>;
 }> = [];
 
-for (const rawUrl of channelUrls) {
-  let normalizedUrl = rawUrl.trim();
-  if (!normalizedUrl.startsWith('http')) {
-    if (normalizedUrl.includes('youtube.com')) {
-      normalizedUrl = `https://${normalizedUrl}`;
-    } else {
-      normalizedUrl = `https://www.youtube.com/${normalizedUrl.replace(/^\/+/, '')}`;
-    }
-  }
-  normalizedUrl = normalizedUrl.replace(/\/videos\/?$/, '');
-
+for (const normalizedUrl of channelUrls) {
   requests.push({
     url: normalizedUrl,
     userData: {
@@ -100,23 +90,32 @@ for (const keyword of searchKeywords) {
   });
 }
 
-if (requests.length === 0) {
-  log.error('No channel URLs or search keywords provided. Provide at least one.');
-  throw new Error('No channel URLs or search keywords provided. Provide at least one.');
-}
-
-log.info(`Starting crawl with ${requests.length} initial request(s)`);
+log.info(
+  `Starting crawl with ${requests.length} initial request(s); `
+  + `at most ${maxRequestsPerCrawl - searchKeywords.length} channel pages will be handled.`,
+);
 
 await crawler.run(requests);
 
 const scrapeState = getScrapeState();
 
-if (scrapeState.spendingLimitReached) {
-  throw new Error('YouTube crawl stopped because the charge limit was reached.');
+const allSearchesCompletedEmpty = channelUrls.length === 0
+  && scrapeState.confirmedEmptySearchCount === searchKeywords.length
+  && failedRequestCount === 0;
+
+if (scrapeState.chargedChannelCount === 0 && !scrapeState.spendingLimitReached && !allSearchesCompletedEmpty) {
+  throw new Error(`No YouTube channel rows were saved. Failed requests: ${failedRequestCount}.`);
 }
 
-if (scrapeState.chargedChannelCount === 0) {
-  throw new Error(`No YouTube channel rows were saved. Failed requests: ${failedRequestCount}.`);
+if (allSearchesCompletedEmpty) {
+  log.info(`YouTube returned no matching channels for ${scrapeState.confirmedEmptySearchCount} search keyword(s).`);
+}
+
+if (scrapeState.spendingLimitReached) {
+  log.warning(
+    `YouTube crawl stopped at the user's spending limit after `
+    + `${scrapeState.chargedChannelCount} saved channel row(s).`,
+  );
 }
 
 log.info(`Crawl complete. Saved channel rows: ${scrapeState.chargedChannelCount}. Saved video rows: ${scrapeState.savedVideoCount}. Failed requests: ${failedRequestCount}.`);

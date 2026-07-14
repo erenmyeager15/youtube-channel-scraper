@@ -1,6 +1,7 @@
 export interface ProxyConfig {
   useApifyProxy?: boolean;
   apifyProxyGroups?: string[];
+  apifyProxyCountry?: string;
   proxyUrls?: string[];
 }
 

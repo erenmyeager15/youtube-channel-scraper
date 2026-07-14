@@ -8,7 +8,8 @@
     "start": "tsx src/main.ts",
     "start:compiled": "node dist/main.js",
     "build": "tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run build && node scripts/audit.mjs",
+    "lint": "tsc --noEmit"
   },
   "keywords": [
     "youtube",
