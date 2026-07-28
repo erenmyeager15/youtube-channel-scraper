@@ -26,7 +26,7 @@ let failedRequestCount = 0;
 
 const crawler = new PlaywrightCrawler({
   proxyConfiguration,
-  maxConcurrency: 3,
+  maxConcurrency: 2,
   minConcurrency: 1,
   maxRequestsPerCrawl,
   requestHandlerTimeoutSecs: 300,
@@ -36,6 +36,21 @@ const crawler = new PlaywrightCrawler({
   maxSessionRotations: 3,
   retryOnBlocked: true,
   maxRequestRetries: 3,
+  preNavigationHooks: [
+    async ({ page }) => {
+      await page.setExtraHTTPHeaders({
+        'Accept-Language': 'en-US,en;q=0.9',
+      });
+      await page.route('**/*', async (route) => {
+        const resourceType = route.request().resourceType();
+        if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
+          await route.abort().catch(() => undefined);
+          return;
+        }
+        await route.continue().catch(() => undefined);
+      });
+    },
+  ],
   requestHandler: async (context) => {
     if (getScrapeState().spendingLimitReached) {
       context.request.noRetry = true;

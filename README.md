@@ -136,7 +136,7 @@ This Actor uses Pay Per Event pricing.
 | Actor start | $0.00005 per GB of memory |
 | Each successfully saved `channel-scraped` channel | $0.003 |
 
-The Actor is capped at 2 GB of memory, so the startup charge is approximately $0.00010 per run. Available latest-video rows are included in the channel charge. A one-channel run is therefore approximately $0.00310 before any applicable account-level charges.
+The Actor defaults to 1 GB of memory and can be raised to 2 GB for larger batches. At the default memory, the startup charge is approximately $0.00005 per run. Available latest-video rows are included in the channel charge. A one-channel run is therefore approximately $0.00305 before any applicable account-level charges.
 
 Failed channel extractions and duplicate channel aliases are not charged as `channel-scraped` events. When a maximum-cost limit is reached, the Actor finishes cleanly after storing the current paid channel and its available video rows, then skips queued channel work.
 
