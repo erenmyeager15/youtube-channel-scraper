@@ -134,6 +134,10 @@ export function buildProxyConfigurationOptions(raw: ActorInput['proxyConfigurati
     return undefined;
   }
 
+  if (config.useApifyProxy !== true && groups.length === 0 && !country) {
+    return undefined;
+  }
+
   return {
     useApifyProxy: true,
     ...(groups.length > 0 ? { apifyProxyGroups: groups } : {}),

@@ -5,6 +5,6 @@
   "maxVideosPerChannel": 1,
   "includeShorts": false,
   "proxyConfiguration": {
-    "useApifyProxy": true
+    "useApifyProxy": false
   }
 }

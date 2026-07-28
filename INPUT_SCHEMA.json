@@ -53,14 +53,14 @@
     },
     "proxyConfiguration": {
       "title": "Proxy Configuration",
-      "description": "Proxy settings for browser requests. Supports Apify Proxy, a two-letter proxy country, custom proxy URLs, or direct mode. Apify Proxy is enabled by default.",
+      "description": "Optional proxy settings for browser requests. Direct mode is the low-cost default; enable Apify Proxy or provide custom proxy URLs if direct requests are rate-limited.",
       "type": "object",
       "editor": "proxy",
       "default": {
-        "useApifyProxy": true
+        "useApifyProxy": false
       },
       "sectionCaption": "Proxy Settings",
-      "sectionDescription": "Configure proxies to avoid rate limiting."
+      "sectionDescription": "Direct mode is usually sufficient. Enable a proxy only when needed."
     }
   }
 }

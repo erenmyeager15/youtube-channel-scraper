@@ -18,7 +18,7 @@ Run one channel with one latest video:
   "maxVideosPerChannel": 1,
   "includeShorts": false,
   "proxyConfiguration": {
-    "useApifyProxy": true
+    "useApifyProxy": false
   }
 }
 ```
@@ -105,7 +105,7 @@ Counts, titles, thumbnails, and relative dates can change when YouTube updates t
 | `maxChannels` | integer | `1` | Maximum channels scraped per search keyword, from 1 to 50 |
 | `maxVideosPerChannel` | integer | `1` | Maximum latest rows saved from the currently loaded public Videos grid, from 1 to 100 |
 | `includeShorts` | boolean | `false` | Include videos detected as Shorts from YouTube routing, with duration used only as a fallback |
-| `proxyConfiguration` | object | Apify Proxy on | Apify Proxy, country, custom-proxy, or direct settings |
+| `proxyConfiguration` | object | Direct | Optional Apify Proxy, country, custom-proxy, or direct settings |
 
 Provide at least one channel URL, handle, or search keyword. Direct channel inputs are more predictable than keyword search. Search results vary by region and ranking. A run handles at most 50 unique channel pages across direct and search-discovered inputs.
 
@@ -162,7 +162,7 @@ curl -X POST "https://api.apify.com/v2/acts/fascinating_lentil~youtube-channel-s
     "maxChannels": 1,
     "maxVideosPerChannel": 1,
     "includeShorts": false,
-    "proxyConfiguration": {"useApifyProxy": true}
+    "proxyConfiguration": {"useApifyProxy": false}
   }'
 ```
 

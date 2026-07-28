@@ -9,7 +9,7 @@
   "input": "../INPUT_SCHEMA.json",
   "readme": "../README.md",
   "exampleRunInput": {
-    "body": "{\"channelUrls\":[\"https://www.youtube.com/@mkbhd\"],\"searchKeywords\":[],\"maxChannels\":1,\"maxVideosPerChannel\":1,\"includeShorts\":false,\"proxyConfiguration\":{\"useApifyProxy\":true}}",
+    "body": "{\"channelUrls\":[\"https://www.youtube.com/@mkbhd\"],\"searchKeywords\":[],\"maxChannels\":1,\"maxVideosPerChannel\":1,\"includeShorts\":false,\"proxyConfiguration\":{\"useApifyProxy\":false}}",
     "contentType": "application/json; charset=utf-8"
   },
   "pricingInfo": {

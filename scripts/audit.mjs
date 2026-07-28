@@ -69,7 +69,7 @@ assert.throws(
   /at most 50/i,
 );
 
-assert.deepEqual(buildProxyConfigurationOptions(undefined), { useApifyProxy: true });
+assert.equal(buildProxyConfigurationOptions(undefined), undefined);
 assert.equal(buildProxyConfigurationOptions({ useApifyProxy: false }), undefined);
 assert.deepEqual(
   buildProxyConfigurationOptions({ useApifyProxy: false, proxyUrls: [' http://proxy.test:8000 ', 'http://proxy.test:8000'] }),
