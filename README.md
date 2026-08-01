@@ -1,4 +1,4 @@
-# YouTube Channel Scraper
+# YouTube Channel Scraper: Stats & Latest Videos
 
 Scrape public YouTube channel stats and latest-video summaries without a YouTube login or API key. Provide channel URLs, `@handles`, or search keywords and receive structured channel and video rows for monitoring, research, reporting, and automation.
 

@@ -34,6 +34,7 @@
     }
   },
   "categories": ["SOCIAL_MEDIA", "MARKETING", "BUSINESS"],
+  "categoriesVersion": "1.0.0",
   "minMemoryMbytes": 1024,
   "maxMemoryMbytes": 2048,
   "defaultRunOptions": {
