@@ -119,6 +119,8 @@ assert.match(mainSource, /stopped at the user's spending limit/);
 assert.doesNotMatch(mainSource, /throw new Error\('YouTube crawl stopped because the charge limit was reached/);
 assert.match(routesSource, /Actor\.pushData\(channelRecord, CHANNEL_SCRAPED_EVENT\)/);
 assert.doesNotMatch(routesSource, /Actor\.charge\(/);
+assert.match(routesSource, /const reuseLoadedVideosPage = maxVideos > 0/);
+assert.match(routesSource, /if \(!reuseLoadedVideosPage\) \{\s*await page\.goto\(videosTabUrl/s);
 assert.match(routesSource, /\.filter\(\(video\) => includeShorts \|\| !video\.isShorts\)\s*\.slice\(0, maxVideos\)/s);
 
 console.log('Audit checks passed.');

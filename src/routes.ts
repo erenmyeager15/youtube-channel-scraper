@@ -61,8 +61,13 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
   log.info(`Scraping channel: ${channelUrl}`);
 
   try {
+    const reuseLoadedVideosPage = maxVideos > 0;
+    const initialPageUrl = reuseLoadedVideosPage
+      ? `${channelUrl.replace(/\/$/, '')}/videos`
+      : channelUrl;
+
     await randomDelay();
-    await page.goto(channelUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await page.goto(initialPageUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await page
       .waitForFunction(() => Boolean((window as unknown as { ytInitialData?: unknown }).ytInitialData), { timeout: 15_000 })
       .catch(() => undefined);
@@ -180,6 +185,7 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
       channelRecord.channelName,
       maxVideos,
       includeShorts,
+      reuseLoadedVideosPage,
     );
 
     const chargeResult = await Actor.pushData(channelRecord, CHANNEL_SCRAPED_EVENT);
@@ -229,6 +235,7 @@ async function collectLatestVideos(
   channelName: string | null,
   maxVideos: number,
   includeShorts: boolean,
+  reuseLoadedVideosPage = false,
 ): Promise<VideoRecord[]> {
   if (maxVideos < 1) return [];
 
@@ -236,11 +243,13 @@ async function collectLatestVideos(
   const videosTabUrl = `${channelUrl.replace(/\/$/, '')}/videos`;
 
   try {
-    await page.goto(videosTabUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    await page
-      .waitForFunction(() => Boolean((window as unknown as { ytInitialData?: unknown }).ytInitialData), { timeout: 15_000 })
-      .catch(() => undefined);
-    await randomDelay(800, 1500);
+    if (!reuseLoadedVideosPage) {
+      await page.goto(videosTabUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      await page
+        .waitForFunction(() => Boolean((window as unknown as { ytInitialData?: unknown }).ytInitialData), { timeout: 15_000 })
+        .catch(() => undefined);
+      await randomDelay(800, 1500);
+    }
 
     const documentState = await inspectDocument(page);
     if (documentState === 'blocked') {
