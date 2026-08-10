@@ -66,12 +66,10 @@ export async function channelHandler(context: PlaywrightCrawlingContext): Promis
       ? `${channelUrl.replace(/\/$/, '')}/videos`
       : channelUrl;
 
-    await randomDelay();
     await page.goto(initialPageUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await page
       .waitForFunction(() => Boolean((window as unknown as { ytInitialData?: unknown }).ytInitialData), { timeout: 15_000 })
       .catch(() => undefined);
-    await randomDelay(800, 1800);
 
     const documentState = await inspectDocument(page);
     if (documentState === 'blocked') {
@@ -248,7 +246,6 @@ async function collectLatestVideos(
       await page
         .waitForFunction(() => Boolean((window as unknown as { ytInitialData?: unknown }).ytInitialData), { timeout: 15_000 })
         .catch(() => undefined);
-      await randomDelay(800, 1500);
     }
 
     const documentState = await inspectDocument(page);
