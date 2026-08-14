@@ -26,7 +26,8 @@ let failedRequestCount = 0;
 
 const crawler = new PlaywrightCrawler({
   proxyConfiguration,
-  maxConcurrency: 2,
+  // One browser page keeps the 1 GB default reliable and predictable.
+  maxConcurrency: 1,
   minConcurrency: 1,
   maxRequestsPerCrawl,
   requestHandlerTimeoutSecs: 300,

@@ -113,7 +113,7 @@ assert.equal(redactContactInfo('Email test@example.com or call +1 212 555 0199')
 const mainSource = readText('src/main.ts');
 const routesSource = readText('src/routes.ts');
 assert.match(mainSource, /maxRequestsPerCrawl/);
-assert.match(mainSource, /maxConcurrency:\s*2/);
+assert.match(mainSource, /maxConcurrency:\s*1/);
 assert.match(mainSource, /\['image', 'media', 'font', 'stylesheet'\]/);
 assert.match(mainSource, /stopped at the user's spending limit/);
 assert.doesNotMatch(mainSource, /throw new Error\('YouTube crawl stopped because the charge limit was reached/);
