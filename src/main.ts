@@ -1,139 +1,192 @@
-import { Actor } from 'apify';
-import { PlaywrightCrawler, log } from 'crawlee';
-import { ActorInput } from './types.js';
-import { channelHandler, getScrapeState, searchHandler } from './routes.js';
-import { normalizeActorInput } from './run-config.js';
+import { Actor, log } from 'apify';
+
+import { normalizeActorInput, normalizeYouTubeChannelUrl } from './run-config.js';
+import type { ActorInput, ChannelRecord, VideoRecord } from './types.js';
+import {
+  extractChannelMetadata,
+  extractSearchChannelUrls,
+  extractVideos,
+  fetchYouTubePage,
+} from './youtube-http.js';
+import {
+  detectShorts,
+  formatDuration,
+  parseCompactCount,
+  parseDurationToSeconds,
+  redactContactInfo,
+  truncate,
+} from './youtube-utils.js';
+
+const CHANNEL_SCRAPED_EVENT = 'channel-scraped';
 
 await Actor.init();
 
-const input = await Actor.getInput<ActorInput>() ?? {};
-const normalizedInput = normalizeActorInput(input);
-const {
-  channelUrls,
-  searchKeywords,
-  maxChannels,
-  maxVideosPerChannel,
-  includeShorts,
-  proxyOptions,
-  maxRequestsPerCrawl,
-} = normalizedInput;
+try {
+  const input = await Actor.getInput<ActorInput>() ?? {};
+  const normalized = normalizeActorInput(input);
+  const proxyConfiguration = normalized.proxyOptions
+    ? await Actor.createProxyConfiguration(normalized.proxyOptions)
+    : undefined;
+  const channelBudget = normalized.maxRequestsPerCrawl - normalized.searchKeywords.length;
+  const channelQueue = [...normalized.channelUrls];
+  const queuedUrls = new Set(channelQueue.map((url) => url.toLowerCase()));
+  let confirmedEmptySearchCount = 0;
+  let failedRequestCount = 0;
+  let savedChannelCount = 0;
+  let savedVideoCount = 0;
+  let spendingLimitReached = false;
 
-const proxyConfiguration = proxyOptions
-  ? await Actor.createProxyConfiguration(proxyOptions)
-  : undefined;
+  for (const keyword of normalized.searchKeywords) {
+    if (channelQueue.length >= channelBudget) break;
+    try {
+      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(keyword)}&sp=EgIQAg%3D%3D`;
+      const page = await fetchYouTubePage(searchUrl, proxyConfiguration);
+      const discovered = extractSearchChannelUrls(page.initialData, normalized.maxChannels);
+      if (discovered.length === 0) {
+        confirmedEmptySearchCount += 1;
+        log.info(`YouTube returned no channel matches for "${keyword}".`);
+      }
+      for (const rawUrl of discovered) {
+        const url = normalizeYouTubeChannelUrl(rawUrl);
+        if (queuedUrls.has(url.toLowerCase())) continue;
+        channelQueue.push(url);
+        queuedUrls.add(url.toLowerCase());
+        if (channelQueue.length >= channelBudget) break;
+      }
+      log.info(`Discovered ${discovered.length} channel candidate(s) for "${keyword}".`);
+    } catch (error) {
+      failedRequestCount += 1;
+      log.error(`YouTube channel search failed for "${keyword}": ${String(error)}`);
+    }
+  }
 
-let failedRequestCount = 0;
+  const savedChannelKeys = new Set<string>();
+  for (const channelUrl of channelQueue.slice(0, channelBudget)) {
+    if (spendingLimitReached) break;
+    try {
+      const pageUrl = normalized.maxVideosPerChannel > 0
+        ? `${channelUrl.replace(/\/$/, '')}/videos`
+        : channelUrl;
+      const page = await fetchYouTubePage(pageUrl, proxyConfiguration);
+      const metadata = extractChannelMetadata(page.initialData);
+      if (!metadata.title && parseCompactCount(metadata.subscriberText) === null) {
+        throw new Error('No channel metadata was found in YouTube initial data');
+      }
 
-const crawler = new PlaywrightCrawler({
-  proxyConfiguration,
-  // One browser page keeps the 1 GB default reliable and predictable.
-  maxConcurrency: 1,
-  minConcurrency: 1,
-  maxRequestsPerCrawl,
-  requestHandlerTimeoutSecs: 300,
-  sessionPoolOptions: {
-    maxPoolSize: 50,
-  },
-  maxSessionRotations: 3,
-  retryOnBlocked: true,
-  maxRequestRetries: 3,
-  preNavigationHooks: [
-    async ({ page }) => {
-      await page.setExtraHTTPHeaders({
-        'Accept-Language': 'en-US,en;q=0.9',
-      });
-      await page.route('**/*', async (route) => {
-        const resourceType = route.request().resourceType();
-        if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
-          await route.abort().catch(() => undefined);
-          return;
+      let canonicalChannelUrl = channelUrl;
+      if (metadata.canonicalUrl) {
+        try {
+          canonicalChannelUrl = normalizeYouTubeChannelUrl(metadata.canonicalUrl);
+        } catch {
+          log.debug(`Ignoring malformed canonical channel URL: ${metadata.canonicalUrl}`);
         }
-        await route.continue().catch(() => undefined);
-      });
-    },
-  ],
-  requestHandler: async (context) => {
-    if (getScrapeState().spendingLimitReached) {
-      context.request.noRetry = true;
-      context.log.info('Skipping queued YouTube request because the user spending limit has been reached.');
-      return;
+      }
+      const channelKey = (metadata.externalId ?? metadata.handle ?? canonicalChannelUrl).toLowerCase();
+      if (savedChannelKeys.has(channelKey)) {
+        log.info(`Skipping duplicate YouTube channel: ${canonicalChannelUrl}`);
+        continue;
+      }
+
+      const channelRecord: ChannelRecord = {
+        channelUrl: canonicalChannelUrl,
+        channelName: metadata.title,
+        handle: metadata.handle,
+        subscriberCount: metadata.subscriberText,
+        subscriberCountNumber: parseCompactCount(metadata.subscriberText),
+        totalViews: null,
+        totalViewsNumber: null,
+        totalVideoCount: metadata.videoCountText,
+        totalVideoCountNumber: parseCompactCount(metadata.videoCountText),
+        joinDate: null,
+        country: null,
+        channelDescription: redactContactInfo(truncate(metadata.description, 2000)),
+        avatarImageUrl: metadata.avatarUrl,
+        bannerImageUrl: metadata.bannerUrl,
+        channelCategory: null,
+        isVerified: metadata.isVerified,
+        socialLinks: [],
+        scrapedAt: new Date().toISOString(),
+      };
+
+      const chargeResult = await Actor.pushData(channelRecord, CHANNEL_SCRAPED_EVENT);
+      const recordWasSaved = chargeResult.chargedCount > 0 || !chargeResult.eventChargeLimitReached;
+      if (!recordWasSaved) {
+        spendingLimitReached = true;
+        log.warning(`Charge limit reached for ${CHANNEL_SCRAPED_EVENT}; the channel was not saved.`);
+        break;
+      }
+
+      savedChannelKeys.add(channelKey);
+      savedChannelCount += 1;
+      const videoRecords = buildVideoRecords(
+        page.initialData,
+        canonicalChannelUrl,
+        metadata.title,
+        normalized.maxVideosPerChannel,
+        normalized.includeShorts,
+      );
+      if (videoRecords.length > 0) {
+        await Actor.pushData(videoRecords);
+        savedVideoCount += videoRecords.length;
+      }
+      log.info(`Saved ${metadata.title ?? canonicalChannelUrl} with ${videoRecords.length} video row(s).`);
+
+      if (chargeResult.eventChargeLimitReached) spendingLimitReached = true;
+    } catch (error) {
+      failedRequestCount += 1;
+      log.error(`YouTube channel request failed for ${channelUrl}: ${String(error)}`);
     }
+  }
 
-    const label = context.request.userData['label'] as string | undefined;
-
-    if (label === 'channel') {
-      await channelHandler(context);
-    } else if (label === 'search') {
-      await searchHandler(context);
-    } else {
-      await channelHandler(context);
-    }
-  },
-  failedRequestHandler: async ({ request, log: reqLog }, error) => {
-    failedRequestCount += 1;
-    reqLog.error(`Request ${request.url} failed after retries: ${error.message}`);
-  },
-});
-
-const requests: Array<{
-  url: string;
-  userData: Record<string, unknown>;
-}> = [];
-
-for (const normalizedUrl of channelUrls) {
-  requests.push({
-    url: normalizedUrl,
-    userData: {
-      label: 'channel',
-      channelUrl: normalizedUrl,
-      maxVideos: maxVideosPerChannel,
-      includeShorts,
-    },
-  });
+  const allSearchesCompletedEmpty = normalized.channelUrls.length === 0
+    && confirmedEmptySearchCount === normalized.searchKeywords.length
+    && failedRequestCount === 0;
+  if (savedChannelCount === 0 && !spendingLimitReached && !allSearchesCompletedEmpty) {
+    throw new Error(`No YouTube channel rows were saved. Failed requests: ${failedRequestCount}.`);
+  }
+  if (spendingLimitReached) {
+    log.warning(`YouTube crawl stopped at the user's spending limit after ${savedChannelCount} saved channel row(s).`);
+  }
+  log.info(`Run complete. Saved channel rows: ${savedChannelCount}. Saved video rows: ${savedVideoCount}. Failed requests: ${failedRequestCount}.`);
+} catch (error) {
+  await Actor.fail(error instanceof Error ? error.message : String(error));
 }
-
-for (const keyword of searchKeywords) {
-  const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(keyword)}&sp=EgIQAg%3D%3D`;
-  requests.push({
-    url: searchUrl,
-    userData: {
-      label: 'search',
-      keyword,
-      maxChannels,
-      maxVideosPerChannel,
-      includeShorts,
-    },
-  });
-}
-
-log.info(
-  `Starting crawl with ${requests.length} initial request(s); `
-  + `at most ${maxRequestsPerCrawl - searchKeywords.length} channel pages will be handled.`,
-);
-
-await crawler.run(requests);
-
-const scrapeState = getScrapeState();
-
-const allSearchesCompletedEmpty = channelUrls.length === 0
-  && scrapeState.confirmedEmptySearchCount === searchKeywords.length
-  && failedRequestCount === 0;
-
-if (scrapeState.chargedChannelCount === 0 && !scrapeState.spendingLimitReached && !allSearchesCompletedEmpty) {
-  throw new Error(`No YouTube channel rows were saved. Failed requests: ${failedRequestCount}.`);
-}
-
-if (allSearchesCompletedEmpty) {
-  log.info(`YouTube returned no matching channels for ${scrapeState.confirmedEmptySearchCount} search keyword(s).`);
-}
-
-if (scrapeState.spendingLimitReached) {
-  log.warning(
-    `YouTube crawl stopped at the user's spending limit after `
-    + `${scrapeState.chargedChannelCount} saved channel row(s).`,
-  );
-}
-
-log.info(`Crawl complete. Saved channel rows: ${scrapeState.chargedChannelCount}. Saved video rows: ${scrapeState.savedVideoCount}. Failed requests: ${failedRequestCount}.`);
 
 await Actor.exit();
+
+function buildVideoRecords(
+  initialData: Record<string, any>,
+  channelUrl: string,
+  channelName: string | null,
+  maximum: number,
+  includeShorts: boolean,
+): VideoRecord[] {
+  return extractVideos(initialData)
+    .map((video): VideoRecord => {
+      const durationSeconds = parseDurationToSeconds(video.lengthText);
+      const isShorts = detectShorts(video.navigationUrl, durationSeconds);
+      return {
+        channelUrl,
+        channelName,
+        videoUrl: `https://www.youtube.com/watch?v=${video.videoId}`,
+        videoTitle: video.title,
+        viewCount: video.viewText,
+        viewCountNumber: parseCompactCount(video.viewText),
+        likeCount: null,
+        likeCountNumber: null,
+        commentCount: null,
+        commentCountNumber: null,
+        durationSeconds,
+        durationFormatted: formatDuration(durationSeconds),
+        publishedDate: video.publishedText,
+        thumbnailUrl: video.thumbnailUrl,
+        videoDescription: null,
+        tags: [],
+        category: null,
+        isShorts,
+        scrapedAt: new Date().toISOString(),
+      };
+    })
+    .filter((video) => includeShorts || !video.isShorts)
+    .slice(0, maximum);
+}

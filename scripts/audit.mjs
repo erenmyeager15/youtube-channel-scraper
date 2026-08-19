@@ -20,6 +20,12 @@ const {
   parseDurationToSeconds,
   redactContactInfo,
 } = await import('../dist/youtube-utils.js');
+const {
+  extractChannelMetadata,
+  extractInitialData,
+  extractSearchChannelUrls,
+  extractVideos,
+} = await import('../dist/youtube-http.js');
 
 const actor = readJson('.actor/actor.json');
 const schema = readJson('INPUT_SCHEMA.json');
@@ -28,10 +34,10 @@ assert.equal(actor.pricingInfo?.pricingModel, 'PAY_PER_EVENT');
 assert.equal(actor.pricingInfo.pricingPerEvent.actorChargeEvents['channel-scraped'].eventPriceUsd, 0.003);
 assert.equal(actor.pricingInfo.pricingPerEvent.actorChargeEvents['channel-scraped'].isPrimaryEvent, true);
 assert.equal(actor.pricingInfo.pricingPerEvent.actorChargeEvents['apify-actor-start'].eventPriceUsd, 0.00005);
-assert.equal(actor.defaultRunOptions.memoryMbytes, 1024);
-assert.equal(actor.minMemoryMbytes, 1024);
-assert.equal(actor.maxMemoryMbytes, 2048);
-assert.equal(actor.defaultRunOptions.timeoutSecs, 900);
+assert.equal(actor.defaultRunOptions.memoryMbytes, 256);
+assert.equal(actor.minMemoryMbytes, 256);
+assert.equal(actor.maxMemoryMbytes, 1024);
+assert.equal(actor.defaultRunOptions.timeoutSecs, 300);
 assert.equal(schema.properties.channelUrls.maxItems, MAX_CHANNELS_PER_RUN);
 assert.equal(schema.properties.searchKeywords.maxItems, MAX_SEARCH_KEYWORDS);
 
@@ -110,17 +116,54 @@ assert.equal(detectShorts(null, 45), true);
 assert.equal(detectShorts(null, 120), false);
 assert.equal(redactContactInfo('Email test@example.com or call +1 212 555 0199'), 'Email [redacted] or call [redacted]');
 
+const parserFixture = {
+  metadata: {
+    channelMetadataRenderer: {
+      title: 'Fixture Channel',
+      description: 'Fixture description',
+      externalId: 'UC_FIXTURE',
+      channelUrl: 'https://www.youtube.com/channel/UC_FIXTURE',
+    },
+  },
+  header: {
+    c4TabbedHeaderRenderer: {
+      channelHandleText: { runs: [{ text: '@fixture' }] },
+      subscriberCountText: { simpleText: '1.2K subscribers' },
+      videosCountText: { runs: [{ text: '12 videos' }] },
+    },
+  },
+  contents: [
+    {
+      videoRenderer: {
+        videoId: 'video123',
+        title: { runs: [{ text: 'Fixture video' }] },
+        viewCountText: { simpleText: '345 views' },
+        publishedTimeText: { simpleText: '1 day ago' },
+        lengthText: { simpleText: '2:30' },
+      },
+    },
+    {
+      channelRenderer: {
+        channelId: 'UC_SEARCH',
+        navigationEndpoint: { commandMetadata: { webCommandMetadata: { url: '/@search-result' } } },
+      },
+    },
+  ],
+};
+const parsedFixture = extractInitialData(`<script>var ytInitialData = ${JSON.stringify(parserFixture)};</script>`);
+assert.equal(extractChannelMetadata(parsedFixture).title, 'Fixture Channel');
+assert.equal(extractChannelMetadata(parsedFixture).subscriberText, '1.2K subscribers');
+assert.equal(extractVideos(parsedFixture)[0].videoId, 'video123');
+assert.deepEqual(extractSearchChannelUrls(parsedFixture, 1), ['https://www.youtube.com/@search-result']);
+
 const mainSource = readText('src/main.ts');
-const routesSource = readText('src/routes.ts');
+const httpSource = readText('src/youtube-http.ts');
 assert.match(mainSource, /maxRequestsPerCrawl/);
-assert.match(mainSource, /maxConcurrency:\s*1/);
-assert.match(mainSource, /\['image', 'media', 'font', 'stylesheet'\]/);
 assert.match(mainSource, /stopped at the user's spending limit/);
-assert.doesNotMatch(mainSource, /throw new Error\('YouTube crawl stopped because the charge limit was reached/);
-assert.match(routesSource, /Actor\.pushData\(channelRecord, CHANNEL_SCRAPED_EVENT\)/);
-assert.doesNotMatch(routesSource, /Actor\.charge\(/);
-assert.match(routesSource, /const reuseLoadedVideosPage = maxVideos > 0/);
-assert.match(routesSource, /if \(!reuseLoadedVideosPage\) \{\s*await page\.goto\(videosTabUrl/s);
-assert.match(routesSource, /\.filter\(\(video\) => includeShorts \|\| !video\.isShorts\)\s*\.slice\(0, maxVideos\)/s);
+assert.match(mainSource, /Actor\.pushData\(channelRecord, CHANNEL_SCRAPED_EVENT\)/);
+assert.doesNotMatch(mainSource, /PlaywrightCrawler|Actor\.charge\(/);
+assert.match(httpSource, /extractInitialData/);
+assert.match(httpSource, /gotScraping/);
+assert.doesNotMatch(httpSource, /playwright|chromium/i);
 
 console.log('Audit checks passed.');

@@ -35,12 +35,12 @@
   },
   "categories": ["SOCIAL_MEDIA", "MARKETING", "BUSINESS"],
   "categoriesVersion": "1.0.0",
-  "minMemoryMbytes": 1024,
-  "maxMemoryMbytes": 2048,
+  "minMemoryMbytes": 256,
+  "maxMemoryMbytes": 1024,
   "defaultRunOptions": {
     "build": "latest",
-    "memoryMbytes": 1024,
-    "timeoutSecs": 900
+    "memoryMbytes": 256,
+    "timeoutSecs": 300
   },
   "output": "./output_schema.json",
   "storages": {

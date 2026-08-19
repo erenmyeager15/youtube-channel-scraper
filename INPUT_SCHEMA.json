@@ -53,7 +53,7 @@
     },
     "proxyConfiguration": {
       "title": "Proxy Configuration",
-      "description": "Optional proxy settings for browser requests. Direct mode is the low-cost default; enable Apify Proxy or provide custom proxy URLs if direct requests are rate-limited.",
+      "description": "Optional proxy settings for HTTP requests. Direct mode is the low-cost default; enable Apify Proxy or provide custom proxy URLs if direct requests are rate-limited.",
       "type": "object",
       "editor": "proxy",
       "default": {

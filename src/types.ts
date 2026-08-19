@@ -14,21 +14,6 @@ export interface ActorInput {
   proxyConfiguration?: ProxyConfig;
 }
 
-export interface ChannelUserData {
-  label: 'channel';
-  channelUrl: string;
-  maxVideos: number;
-  includeShorts: boolean;
-}
-
-export interface SearchUserData {
-  label: 'search';
-  keyword: string;
-  maxChannels: number;
-  maxVideosPerChannel: number;
-  includeShorts: boolean;
-}
-
 export interface ChannelRecord {
   channelUrl: string;
   channelName: string | null;

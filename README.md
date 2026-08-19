@@ -2,7 +2,7 @@
 
 Scrape public YouTube channel stats and latest-video summaries without a YouTube login or API key. Provide channel URLs, `@handles`, or search keywords and receive structured channel and video rows for monitoring, research, reporting, and automation.
 
-The Actor uses a browser to read public YouTube channel pages. It returns the fields YouTube exposes on those pages and marks unavailable fields as `null`.
+The Actor uses bounded HTTP requests to read public YouTube channel pages and parses YouTube's embedded public page data. It returns the fields YouTube exposes on those pages and marks unavailable fields as `null`.
 
 ## Quick start
 
@@ -136,7 +136,7 @@ This Actor uses Pay Per Event pricing.
 | Actor start | $0.00005 per GB of memory |
 | Each successfully saved `channel-scraped` channel | $0.003 |
 
-The Actor defaults to 1 GB of memory and can be raised to 2 GB for larger batches. At the default memory, the startup charge is approximately $0.00005 per run. Available latest-video rows are included in the channel charge. A one-channel run is therefore approximately $0.00305 before any applicable account-level charges.
+The Actor defaults to 256 MB of memory and can be raised to 1 GB for larger batches. Actor-start billing uses a minimum of one event, so the startup charge remains approximately $0.00005 per run at the default memory. Available latest-video rows are included in the channel charge. A one-channel run is therefore approximately $0.00305 before any applicable account-level charges.
 
 Failed channel extractions and duplicate channel aliases are not charged as `channel-scraped` events. When a maximum-cost limit is reached, the Actor finishes cleanly after storing the current paid channel and its available video rows, then skips queued channel work.
 
@@ -145,7 +145,7 @@ Failed channel extractions and duplicate channel aliases are not charged as `cha
 - YouTube changes its page structure regularly. Select fields may temporarily become unavailable.
 - Subscriber counts can be hidden or abbreviated.
 - Search results depend on region and YouTube ranking.
-- Runs are capped at 50 unique channel pages and three concurrent browser handlers. Begin with small batches to reduce rate limiting.
+- Runs are capped at 50 unique channel pages and process them sequentially with bounded HTTP retries. Begin with small batches to reduce rate limiting.
 - Shorts detection prefers YouTube's explicit `/shorts/` route. Duration is only a fallback because Shorts can now be up to three minutes and ordinary videos can be shorter than one minute.
 - If a channel page succeeds but its Videos tab is unavailable, the Actor saves and charges the channel metadata row without fabricating video rows.
 - Video likes, comments, tags, descriptions, and categories are currently emitted as nullable compatibility fields, not guaranteed analytics.

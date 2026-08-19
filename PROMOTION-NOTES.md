@@ -17,7 +17,7 @@ Collect public YouTube channel stats and latest-video summaries from channel URL
 1. Open YouTube Channel Scraper on Apify.
 2. Paste one channel URL or `@handle`.
 3. Keep one channel and one latest video for the first run.
-4. Leave Apify Proxy enabled and run the Actor.
+4. Keep Apify Proxy off for the first low-cost test; enable it only if direct requests are rate-limited.
 5. Show the `Channels` view with name, subscribers, video count, and verification.
 6. Show the `Videos` view with title, views, duration, publish text, and URL.
 7. Export the dataset as CSV or JSON.
