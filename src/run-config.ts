@@ -1,19 +1,23 @@
 import type { ProxyConfigurationOptions } from 'apify';
 
-import type { ActorInput } from './types.js';
+import type { ActorInput, ScrapeMode } from './types.js';
 
 export const MAX_CHANNELS_PER_RUN = 50;
+export const MAX_DETAILED_CHANNELS_PER_RUN = 10;
 export const MAX_SEARCH_KEYWORDS = 10;
 export const MAX_CHANNELS_PER_SEARCH = 50;
 export const MAX_VIDEOS_PER_CHANNEL = 100;
+export const MAX_DETAILED_VIDEOS_PER_CHANNEL = 5;
 
 type ActorProxyOptions = ProxyConfigurationOptions & { useApifyProxy?: boolean };
 
 export interface NormalizedActorInput {
   channelUrls: string[];
   searchKeywords: string[];
+  mode: ScrapeMode;
   maxChannels: number;
   maxVideosPerChannel: number;
+  maxDetailedVideosPerChannel: number;
   includeShorts: boolean;
   proxyOptions: ActorProxyOptions | undefined;
   maxRequestsPerCrawl: number;
@@ -30,6 +34,16 @@ export function normalizeActorInput(input: ActorInput): NormalizedActorInput {
     throw new Error(`searchKeywords accepts at most ${MAX_SEARCH_KEYWORDS} entries per run.`);
   }
 
+  const mode = input.mode ?? 'fast';
+  if (mode !== 'fast' && mode !== 'detailed') {
+    throw new Error('mode must be either "fast" or "detailed".');
+  }
+  if (mode === 'detailed' && channelInputs.length > MAX_DETAILED_CHANNELS_PER_RUN) {
+    throw new Error(
+      `Detailed mode accepts at most ${MAX_DETAILED_CHANNELS_PER_RUN} direct channel URLs per run.`,
+    );
+  }
+
   const channelUrls = [...new Set(channelInputs.map(normalizeYouTubeChannelUrl))];
   const maxChannels = readBoundedInteger(
     input.maxChannels,
@@ -38,12 +52,24 @@ export function normalizeActorInput(input: ActorInput): NormalizedActorInput {
     1,
     'maxChannels',
   );
+  if (mode === 'detailed' && maxChannels > MAX_DETAILED_CHANNELS_PER_RUN) {
+    throw new Error(
+      `maxChannels cannot exceed ${MAX_DETAILED_CHANNELS_PER_RUN} in detailed mode.`,
+    );
+  }
   const maxVideosPerChannel = readBoundedInteger(
     input.maxVideosPerChannel,
     1,
     MAX_VIDEOS_PER_CHANNEL,
     1,
     'maxVideosPerChannel',
+  );
+  const maxDetailedVideosPerChannel = readBoundedInteger(
+    input.maxDetailedVideosPerChannel,
+    0,
+    MAX_DETAILED_VIDEOS_PER_CHANNEL,
+    1,
+    'maxDetailedVideosPerChannel',
   );
   if (input.includeShorts !== undefined && typeof input.includeShorts !== 'boolean') {
     throw new Error('includeShorts must be a boolean.');
@@ -56,11 +82,14 @@ export function normalizeActorInput(input: ActorInput): NormalizedActorInput {
   return {
     channelUrls,
     searchKeywords,
+    mode,
     maxChannels,
     maxVideosPerChannel,
+    maxDetailedVideosPerChannel,
     includeShorts: input.includeShorts ?? false,
     proxyOptions: buildProxyConfigurationOptions(input.proxyConfiguration),
-    maxRequestsPerCrawl: MAX_CHANNELS_PER_RUN + searchKeywords.length,
+    maxRequestsPerCrawl: (mode === 'detailed' ? MAX_DETAILED_CHANNELS_PER_RUN : MAX_CHANNELS_PER_RUN)
+      + searchKeywords.length,
   };
 }
 

@@ -5,11 +5,15 @@ export interface ProxyConfig {
   proxyUrls?: string[];
 }
 
+export type ScrapeMode = 'fast' | 'detailed';
+
 export interface ActorInput {
   channelUrls?: string[];
   searchKeywords?: string[];
+  mode?: ScrapeMode;
   maxChannels?: number;
   maxVideosPerChannel?: number;
+  maxDetailedVideosPerChannel?: number;
   includeShorts?: boolean;
   proxyConfiguration?: ProxyConfig;
 }

@@ -1,6 +1,6 @@
 {
-  "title": "YouTube Channel Scraper: Public Stats & Latest Videos",
-  "description": "Scrape public YouTube channel stats and latest-video summaries. Accepts channel URLs, @handles, or search keywords.",
+  "title": "YouTube Channel Scraper: Stats, Videos & Engagement",
+  "description": "Scrape public YouTube channel stats and latest videos in fast or detailed mode. Accepts channel URLs, @handles, or search keywords.",
   "type": "object",
   "schemaVersion": 1,
   "required": [],
@@ -26,12 +26,32 @@
       "sectionCaption": "Search Input",
       "sectionDescription": "Optional: search YouTube for channels by keyword."
     },
+    "mode": {
+      "title": "Scrape Mode",
+      "description": "Fast reads channel video grids with minimal requests. Detailed also reads About pages and selected video pages for total views, join date, country, social links, likes, descriptions, tags, and category.",
+      "type": "string",
+      "enum": ["fast", "detailed"],
+      "enumTitles": ["Fast - channel stats and video summaries", "Detailed - engagement and About data"],
+      "default": "fast",
+      "editor": "select",
+      "sectionCaption": "Extraction Mode",
+      "sectionDescription": "Use Fast for larger monitoring runs. Use Detailed when you need richer research fields."
+    },
     "maxChannels": {
       "title": "Max Channels from Search",
-      "description": "Maximum number of channels to scrape from each search keyword.",
+      "description": "Maximum number of channels to scrape from each search keyword. Detailed mode allows at most 10 channels total per run.",
       "type": "integer",
       "minimum": 1,
       "maximum": 50,
+      "default": 1,
+      "editor": "number"
+    },
+    "maxDetailedVideosPerChannel": {
+      "title": "Videos to Enrich Per Channel",
+      "description": "Detailed mode only: number of saved video rows whose individual pages are read for exact views, likes, descriptions, tags, category, and publish date.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5,
       "default": 1,
       "editor": "number"
     },

@@ -1,15 +1,15 @@
 {
   "actorSpecification": 1,
   "name": "youtube-channel-scraper",
-  "title": "YouTube Channel Scraper: Stats & Latest Videos",
-  "description": "Scrape public YouTube channel stats and latest-video summaries from channel URLs, handles, or search keywords. Get names, subscribers, video counts, views, durations, thumbnails, and URLs.",
+  "title": "YouTube Channel Scraper: Stats, Videos & Engagement",
+  "description": "Scrape public YouTube channels and latest videos in fast or detailed mode. Get subscribers, total views, join date, country, social links, video views, likes, descriptions, tags, and category.",
   "version": "1.0",
   "buildTag": "latest",
   "dockerfile": "Dockerfile",
   "input": "../INPUT_SCHEMA.json",
   "readme": "../README.md",
   "exampleRunInput": {
-    "body": "{\"channelUrls\":[\"https://www.youtube.com/@mkbhd\"],\"searchKeywords\":[],\"maxChannels\":1,\"maxVideosPerChannel\":1,\"includeShorts\":false,\"proxyConfiguration\":{\"useApifyProxy\":false}}",
+    "body": "{\"channelUrls\":[\"https://www.youtube.com/@mkbhd\"],\"searchKeywords\":[],\"mode\":\"fast\",\"maxChannels\":1,\"maxVideosPerChannel\":1,\"maxDetailedVideosPerChannel\":1,\"includeShorts\":false,\"proxyConfiguration\":{\"useApifyProxy\":false}}",
     "contentType": "application/json; charset=utf-8"
   },
   "pricingInfo": {
@@ -25,7 +25,7 @@
         },
         "channel-scraped": {
           "eventTitle": "Channel scraped",
-          "eventDescription": "Charged once per saved channel (includes channel metadata and any available latest-video rows).",
+          "eventDescription": "Charged once per saved channel, including its available fast or detailed latest-video rows.",
           "eventPriceUsd": 0.003,
           "isPrimaryEvent": true,
           "isOneTimeEvent": false
@@ -40,7 +40,7 @@
   "defaultRunOptions": {
     "build": "latest",
     "memoryMbytes": 256,
-    "timeoutSecs": 300
+    "timeoutSecs": 900
   },
   "output": "./output_schema.json",
   "storages": {

@@ -3,10 +3,13 @@ import { Actor, log } from 'apify';
 import { normalizeActorInput, normalizeYouTubeChannelUrl } from './run-config.js';
 import type { ActorInput, ChannelRecord, VideoRecord } from './types.js';
 import {
+  extractChannelAbout,
   extractChannelMetadata,
   extractSearchChannelUrls,
+  extractVideoDetails,
   extractVideos,
   fetchYouTubePage,
+  fetchYouTubePlayerData,
 } from './youtube-http.js';
 import {
   detectShorts,
@@ -32,6 +35,7 @@ try {
   const queuedUrls = new Set(channelQueue.map((url) => url.toLowerCase()));
   let confirmedEmptySearchCount = 0;
   let failedRequestCount = 0;
+  let detailedRequestFailureCount = 0;
   let savedChannelCount = 0;
   let savedVideoCount = 0;
   let spendingLimitReached = false;
@@ -87,24 +91,49 @@ try {
         continue;
       }
 
+      let about: ReturnType<typeof extractChannelAbout> = null;
+      if (normalized.mode === 'detailed') {
+        try {
+          const aboutPage = await fetchYouTubePage(
+            `${canonicalChannelUrl.replace(/\/$/, '')}/about`,
+            proxyConfiguration,
+          );
+          about = extractChannelAbout(aboutPage.initialData);
+          if (!about) throw new Error('YouTube About metadata was not found');
+          if (about.canonicalUrl) {
+            try {
+              canonicalChannelUrl = normalizeYouTubeChannelUrl(about.canonicalUrl);
+            } catch {
+              log.debug(`Ignoring malformed About-page channel URL: ${about.canonicalUrl}`);
+            }
+          }
+        } catch (error) {
+          detailedRequestFailureCount += 1;
+          log.warning(`Detailed channel fields were unavailable for ${canonicalChannelUrl}: ${String(error)}`);
+        }
+      }
+
+      const subscriberText = about?.subscriberText ?? metadata.subscriberText;
+      const videoCountText = about?.videoCountText ?? metadata.videoCountText;
+
       const channelRecord: ChannelRecord = {
         channelUrl: canonicalChannelUrl,
         channelName: metadata.title,
         handle: metadata.handle,
-        subscriberCount: metadata.subscriberText,
-        subscriberCountNumber: parseCompactCount(metadata.subscriberText),
-        totalViews: null,
-        totalViewsNumber: null,
-        totalVideoCount: metadata.videoCountText,
-        totalVideoCountNumber: parseCompactCount(metadata.videoCountText),
-        joinDate: null,
-        country: null,
-        channelDescription: redactContactInfo(truncate(metadata.description, 2000)),
+        subscriberCount: subscriberText,
+        subscriberCountNumber: parseCompactCount(subscriberText),
+        totalViews: about?.totalViewsText ?? null,
+        totalViewsNumber: parseCompactCount(about?.totalViewsText ?? null),
+        totalVideoCount: videoCountText,
+        totalVideoCountNumber: parseCompactCount(videoCountText),
+        joinDate: about?.joinDate ?? null,
+        country: about?.country ?? null,
+        channelDescription: redactContactInfo(truncate(about?.description ?? metadata.description, 5000)),
         avatarImageUrl: metadata.avatarUrl,
         bannerImageUrl: metadata.bannerUrl,
         channelCategory: null,
         isVerified: metadata.isVerified,
-        socialLinks: [],
+        socialLinks: about?.socialLinks ?? [],
         scrapedAt: new Date().toISOString(),
       };
 
@@ -125,6 +154,59 @@ try {
         normalized.maxVideosPerChannel,
         normalized.includeShorts,
       );
+
+      if (normalized.mode === 'detailed' && normalized.maxDetailedVideosPerChannel > 0) {
+        const detailLimit = Math.min(normalized.maxDetailedVideosPerChannel, videoRecords.length);
+        for (let index = 0; index < detailLimit; index += 1) {
+          const record = videoRecords[index];
+          try {
+            const detailPage = await fetchYouTubePage(record.videoUrl, proxyConfiguration);
+            let detail = extractVideoDetails(detailPage.initialData, detailPage.html);
+            const hasExactPublishDate = /^\d{4}-\d{2}-\d{2}/.test(detail.publishedDate ?? '');
+            if (!detail.category || detail.tags.length === 0 || !hasExactPublishDate) {
+              try {
+                const videoId = new URL(record.videoUrl).searchParams.get('v');
+                if (!videoId) throw new Error(`Video ID was not found in ${record.videoUrl}`);
+                const playerData = await fetchYouTubePlayerData(
+                  videoId,
+                  detailPage.html,
+                  proxyConfiguration,
+                  1,
+                );
+                detail = extractVideoDetails(detailPage.initialData, detailPage.html, playerData);
+              } catch (error) {
+                detailedRequestFailureCount += 1;
+                log.warning(
+                  `Optional player metadata was unavailable for ${record.videoUrl}; `
+                  + `keeping the video-page fields. ${String(error)}`,
+                );
+              }
+            }
+            const durationSeconds = detail.durationSeconds ?? record.durationSeconds;
+            videoRecords[index] = {
+              ...record,
+              videoTitle: detail.title ?? record.videoTitle,
+              viewCount: detail.viewCount ?? record.viewCount,
+              viewCountNumber: parseCompactCount(detail.viewCount) ?? record.viewCountNumber,
+              likeCount: detail.likeCount,
+              likeCountNumber: detail.likeCountNumber,
+              commentCount: detail.commentCount,
+              commentCountNumber: detail.commentCountNumber,
+              durationSeconds,
+              durationFormatted: formatDuration(durationSeconds),
+              publishedDate: detail.publishedDate ?? record.publishedDate,
+              thumbnailUrl: detail.thumbnailUrl ?? record.thumbnailUrl,
+              videoDescription: redactContactInfo(truncate(detail.description, 5000)),
+              tags: detail.tags,
+              category: detail.category,
+            };
+          } catch (error) {
+            detailedRequestFailureCount += 1;
+            log.warning(`Detailed video fields were unavailable for ${record.videoUrl}: ${String(error)}`);
+          }
+        }
+      }
+
       if (videoRecords.length > 0) {
         await Actor.pushData(videoRecords);
         savedVideoCount += videoRecords.length;
@@ -147,7 +229,11 @@ try {
   if (spendingLimitReached) {
     log.warning(`YouTube crawl stopped at the user's spending limit after ${savedChannelCount} saved channel row(s).`);
   }
-  log.info(`Run complete. Saved channel rows: ${savedChannelCount}. Saved video rows: ${savedVideoCount}. Failed requests: ${failedRequestCount}.`);
+  log.info(
+    `Run complete in ${normalized.mode} mode. Saved channel rows: ${savedChannelCount}. `
+    + `Saved video rows: ${savedVideoCount}. Failed channel/search requests: ${failedRequestCount}. `
+    + `Detailed-field request failures: ${detailedRequestFailureCount}.`,
+  );
 } catch (error) {
   await Actor.fail(error instanceof Error ? error.message : String(error));
 }

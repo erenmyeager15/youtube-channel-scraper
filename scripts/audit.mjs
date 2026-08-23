@@ -7,6 +7,8 @@ const readText = (path) => fs.readFileSync(new URL(path, root), 'utf8');
 
 const {
   MAX_CHANNELS_PER_RUN,
+  MAX_DETAILED_CHANNELS_PER_RUN,
+  MAX_DETAILED_VIDEOS_PER_CHANNEL,
   MAX_SEARCH_KEYWORDS,
   buildProxyConfigurationOptions,
   normalizeActorInput,
@@ -21,9 +23,13 @@ const {
   redactContactInfo,
 } = await import('../dist/youtube-utils.js');
 const {
+  extractChannelAbout,
   extractChannelMetadata,
   extractInitialData,
+  extractPlayerApiConfig,
+  extractPlayerResponse,
   extractSearchChannelUrls,
+  extractVideoDetails,
   extractVideos,
 } = await import('../dist/youtube-http.js');
 
@@ -37,9 +43,11 @@ assert.equal(actor.pricingInfo.pricingPerEvent.actorChargeEvents['apify-actor-st
 assert.equal(actor.defaultRunOptions.memoryMbytes, 256);
 assert.equal(actor.minMemoryMbytes, 256);
 assert.equal(actor.maxMemoryMbytes, 1024);
-assert.equal(actor.defaultRunOptions.timeoutSecs, 300);
+assert.equal(actor.defaultRunOptions.timeoutSecs, 900);
 assert.equal(schema.properties.channelUrls.maxItems, MAX_CHANNELS_PER_RUN);
 assert.equal(schema.properties.searchKeywords.maxItems, MAX_SEARCH_KEYWORDS);
+assert.deepEqual(schema.properties.mode.enum, ['fast', 'detailed']);
+assert.equal(schema.properties.maxDetailedVideosPerChannel.maximum, MAX_DETAILED_VIDEOS_PER_CHANNEL);
 
 assert.equal(normalizeYouTubeChannelUrl('@mkbhd'), 'https://www.youtube.com/@mkbhd');
 assert.equal(
@@ -63,9 +71,28 @@ const normalized = normalizeActorInput({
 });
 assert.deepEqual(normalized.channelUrls, ['https://www.youtube.com/@mkbhd']);
 assert.deepEqual(normalized.searchKeywords, ['technology']);
+assert.equal(normalized.mode, 'fast');
+assert.equal(normalized.maxDetailedVideosPerChannel, 1);
 assert.equal(normalized.maxRequestsPerCrawl, MAX_CHANNELS_PER_RUN + 1);
 assert.equal(normalized.proxyOptions, undefined);
+const detailed = normalizeActorInput({
+  channelUrls: ['@mkbhd'],
+  mode: 'detailed',
+  maxDetailedVideosPerChannel: MAX_DETAILED_VIDEOS_PER_CHANNEL,
+});
+assert.equal(detailed.mode, 'detailed');
+assert.equal(detailed.maxRequestsPerCrawl, MAX_DETAILED_CHANNELS_PER_RUN);
+assert.equal(detailed.maxDetailedVideosPerChannel, MAX_DETAILED_VIDEOS_PER_CHANNEL);
 assert.throws(() => normalizeActorInput({ channelUrls: ['@mkbhd'], maxChannels: 0 }), /maxChannels/i);
+assert.throws(() => normalizeActorInput({ channelUrls: ['@mkbhd'], mode: 'slow' }), /mode/i);
+assert.throws(
+  () => normalizeActorInput({ channelUrls: ['@mkbhd'], mode: 'detailed', maxChannels: 11 }),
+  /detailed mode/i,
+);
+assert.throws(
+  () => normalizeActorInput({ channelUrls: ['@mkbhd'], maxDetailedVideosPerChannel: 6 }),
+  /maxDetailedVideosPerChannel/i,
+);
 assert.throws(
   () => normalizeActorInput({ channelUrls: ['@mkbhd'], includeShorts: 'false' }),
   /includeShorts must be a boolean/i,
@@ -134,6 +161,20 @@ const parserFixture = {
   },
   contents: [
     {
+      aboutChannelViewModel: {
+        description: 'Fixture about description',
+        country: 'United States',
+        subscriberCountText: '1.2K subscribers',
+        viewCountText: '12,345 views',
+        joinedDateText: { content: 'Joined Jan 2, 2020' },
+        videoCountText: '12 videos',
+        canonicalChannelUrl: 'https://www.youtube.com/@fixture',
+        links: [
+          { channelExternalLinkViewModel: { link: { content: 'example.com/fixture' } } },
+        ],
+      },
+    },
+    {
       videoRenderer: {
         videoId: 'video123',
         title: { runs: [{ text: 'Fixture video' }] },
@@ -153,13 +194,99 @@ const parserFixture = {
 const parsedFixture = extractInitialData(`<script>var ytInitialData = ${JSON.stringify(parserFixture)};</script>`);
 assert.equal(extractChannelMetadata(parsedFixture).title, 'Fixture Channel');
 assert.equal(extractChannelMetadata(parsedFixture).subscriberText, '1.2K subscribers');
+const parsedAbout = extractChannelAbout(parsedFixture);
+assert.equal(parsedAbout?.totalViewsText, '12,345 views');
+assert.equal(parsedAbout?.joinDate, 'Jan 2, 2020');
+assert.equal(parsedAbout?.country, 'United States');
+assert.deepEqual(parsedAbout?.socialLinks, ['https://example.com/fixture']);
 assert.equal(extractVideos(parsedFixture)[0].videoId, 'video123');
 assert.deepEqual(extractSearchChannelUrls(parsedFixture, 1), ['https://www.youtube.com/@search-result']);
+
+const videoInitialFixture = {
+  contents: [
+    {
+      videoPrimaryInfoRenderer: {
+        viewCount: { videoViewCountRenderer: { originalViewCount: { simpleText: '9,876 views' } } },
+      },
+    },
+    { likeCountEntity: { likeCountIfIndifferentNumber: 5432 } },
+    { commentsHeaderRenderer: { countText: { simpleText: '321 Comments' } } },
+  ],
+};
+const playerFixture = {
+  videoDetails: {
+    title: 'Detailed fixture video',
+    lengthSeconds: '150',
+    keywords: ['testing', 'analytics'],
+    shortDescription: 'Fixture video description',
+    viewCount: '9876',
+    thumbnail: { thumbnails: [{ url: 'https://i.ytimg.com/fixture.jpg' }] },
+  },
+  microformat: {
+    playerMicroformatRenderer: {
+      category: 'Science & Technology',
+      publishDate: '2026-08-22',
+      likeCount: '5432',
+    },
+  },
+};
+const playerHtml = `<script>var ytInitialPlayerResponse = {"responseContext":{}};</script>`
+  + `<script>ytcfg.set({"INNERTUBE_API_KEY":"fixture-key","INNERTUBE_CLIENT_VERSION":"2.20260823.01.00"});</script>`
+  + `<script>var ytInitialPlayerResponse = ${JSON.stringify(playerFixture)};</script>`;
+assert.deepEqual(extractPlayerApiConfig(playerHtml), {
+  apiKey: 'fixture-key',
+  clientVersion: '2.20260823.01.00',
+});
+assert.equal(extractPlayerResponse(playerHtml).videoDetails.title, 'Detailed fixture video');
+const videoDetails = extractVideoDetails(videoInitialFixture, playerHtml);
+assert.equal(videoDetails.viewCount, '9,876 views');
+assert.equal(videoDetails.likeCountNumber, 5432);
+assert.equal(videoDetails.commentCountNumber, 321);
+assert.equal(videoDetails.durationSeconds, 150);
+assert.equal(videoDetails.publishedDate, '2026-08-22');
+assert.equal(videoDetails.category, 'Science & Technology');
+assert.deepEqual(videoDetails.tags, ['testing', 'analytics']);
+
+const metaOnlyDetails = extractVideoDetails({}, [
+  '<meta name="title" content="Metadata fixture">',
+  '<meta name="keywords" content="video, sharing, camera phone, video phone, free, upload">',
+  '<meta name="keywords" content="one, two &amp; three">',
+  '<meta itemprop="duration" content="PT4M5S">',
+  '<meta itemprop="datePublished" content="2026-08-23T10:00:00Z">',
+  '<meta itemprop="genre" content="Education">',
+].join(''));
+assert.equal(metaOnlyDetails.title, 'Metadata fixture');
+assert.equal(metaOnlyDetails.durationSeconds, 245);
+assert.equal(metaOnlyDetails.publishedDate, '2026-08-23T10:00:00Z');
+assert.equal(metaOnlyDetails.category, 'Education');
+assert.deepEqual(metaOnlyDetails.tags, ['one', 'two & three']);
+
+const embeddedOnlyHtml = `<script>${JSON.stringify({
+  videoDetails: {
+    videoId: 'embedded123',
+    title: 'Embedded fixture',
+    keywords: ['creator research'],
+    shortDescription: 'Embedded description',
+    lengthSeconds: '90',
+  },
+  microformat: {
+    playerMicroformatRenderer: {
+      category: 'Howto & Style',
+      publishDate: '2026-08-20',
+    },
+  },
+})}</script>`;
+const embeddedOnlyDetails = extractVideoDetails({}, embeddedOnlyHtml);
+assert.equal(embeddedOnlyDetails.title, 'Embedded fixture');
+assert.equal(embeddedOnlyDetails.category, 'Howto & Style');
+assert.equal(embeddedOnlyDetails.publishedDate, '2026-08-20');
+assert.deepEqual(embeddedOnlyDetails.tags, ['creator research']);
 
 const mainSource = readText('src/main.ts');
 const httpSource = readText('src/youtube-http.ts');
 assert.match(mainSource, /maxRequestsPerCrawl/);
 assert.match(mainSource, /stopped at the user's spending limit/);
+assert.match(mainSource, /keeping the video-page fields/);
 assert.match(mainSource, /Actor\.pushData\(channelRecord, CHANNEL_SCRAPED_EVENT\)/);
 assert.doesNotMatch(mainSource, /PlaywrightCrawler|Actor\.charge\(/);
 assert.match(httpSource, /extractInitialData/);
