@@ -7,6 +7,7 @@
         "fields": [
           "channelName",
           "handle",
+          "channelId",
           "subscriberCount",
           "subscriberCountNumber",
           "totalViews",
@@ -15,11 +16,20 @@
           "totalVideoCountNumber",
           "joinDate",
           "country",
+          "websiteLinks",
+          "socialProfiles",
+          "externalLinks",
           "socialLinks",
           "channelDescription",
           "avatarImageUrl",
           "isVerified",
           "channelUrl",
+          "canonicalChannelUrl",
+          "videosUrl",
+          "shortsUrl",
+          "liveStreamsUrl",
+          "playlistsUrl",
+          "communityUrl",
           "scrapedAt"
         ]
       },
@@ -28,6 +38,7 @@
         "properties": {
           "channelName": { "label": "Channel Name", "format": "text" },
           "handle": { "label": "Handle", "format": "text" },
+          "channelId": { "label": "Channel ID", "format": "text" },
           "subscriberCount": { "label": "Subscribers", "format": "text" },
           "subscriberCountNumber": { "label": "Subscribers (number)", "format": "number" },
           "totalViews": { "label": "Total Views", "format": "text" },
@@ -36,11 +47,20 @@
           "totalVideoCountNumber": { "label": "Videos (number)", "format": "number" },
           "joinDate": { "label": "Joined", "format": "text" },
           "country": { "label": "Country", "format": "text" },
-          "socialLinks": { "label": "Social Links", "format": "text" },
+          "websiteLinks": { "label": "Websites", "format": "text" },
+          "socialProfiles": { "label": "Social Profiles", "format": "text" },
+          "externalLinks": { "label": "Named External Links", "format": "text" },
+          "socialLinks": { "label": "All External URLs", "format": "text" },
           "channelDescription": { "label": "Description", "format": "text" },
           "avatarImageUrl": { "label": "Avatar", "format": "image" },
           "isVerified": { "label": "Verified", "format": "boolean" },
           "channelUrl": { "label": "Channel URL", "format": "link" },
+          "canonicalChannelUrl": { "label": "Canonical Channel", "format": "link" },
+          "videosUrl": { "label": "Videos", "format": "link" },
+          "shortsUrl": { "label": "Shorts", "format": "link" },
+          "liveStreamsUrl": { "label": "Live Streams", "format": "link" },
+          "playlistsUrl": { "label": "Playlists", "format": "link" },
+          "communityUrl": { "label": "Community", "format": "link" },
           "scrapedAt": { "label": "Scraped at", "format": "date" }
         }
       }

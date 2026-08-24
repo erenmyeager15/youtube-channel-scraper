@@ -18,8 +18,47 @@ export interface ActorInput {
   proxyConfiguration?: ProxyConfig;
 }
 
+export type ExternalLinkPlatform =
+  | 'website'
+  | 'facebook'
+  | 'instagram'
+  | 'linkedin'
+  | 'x'
+  | 'youtube'
+  | 'tiktok'
+  | 'reddit'
+  | 'twitch'
+  | 'threads'
+  | 'discord';
+
+export interface ChannelExternalLink {
+  title: string | null;
+  url: string;
+  platform: ExternalLinkPlatform;
+}
+
+export interface SocialProfiles {
+  facebook: string[];
+  instagram: string[];
+  linkedin: string[];
+  x: string[];
+  youtube: string[];
+  tiktok: string[];
+  reddit: string[];
+  twitch: string[];
+  threads: string[];
+  discord: string[];
+}
+
 export interface ChannelRecord {
   channelUrl: string;
+  channelId: string | null;
+  canonicalChannelUrl: string;
+  videosUrl: string;
+  shortsUrl: string;
+  liveStreamsUrl: string;
+  playlistsUrl: string;
+  communityUrl: string;
   channelName: string | null;
   handle: string | null;
   subscriberCount: string | null;
@@ -36,6 +75,9 @@ export interface ChannelRecord {
   channelCategory: string | null;
   isVerified: boolean;
   socialLinks: string[];
+  socialProfiles: SocialProfiles;
+  websiteLinks: string[];
+  externalLinks: ChannelExternalLink[];
   scrapedAt: string;
 }
 

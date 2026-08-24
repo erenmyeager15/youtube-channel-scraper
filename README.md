@@ -1,6 +1,6 @@
 # YouTube Channel Scraper: Stats, Videos & Engagement
 
-Scrape public YouTube channel stats and latest videos without a YouTube login or API key. Provide channel URLs, `@handles`, or search keywords and choose a fast monitoring run or a richer detailed run with About-page and video engagement data.
+Scrape public YouTube channel stats, channel-tab links, social profiles, and latest videos without a YouTube login or API key. Provide channel URLs, `@handles`, or search keywords and choose a fast monitoring run or a richer detailed run with About-page and video engagement data.
 
 The Actor uses bounded HTTP requests to read public YouTube pages and parses YouTube's embedded public data. It returns only fields YouTube exposes publicly and marks unavailable fields as `null`.
 
@@ -43,14 +43,16 @@ Export the results as JSON, CSV, Excel, XML, or HTML, or consume them through th
 
 ### Channel rows
 
-- Channel URL, name, and handle
+- Channel URL, channel ID, name, and handle
+- Direct public URLs for the Videos, Shorts, Live Streams, Playlists, and Community tabs
 - Subscriber count as displayed and as a parsed number
 - Total video count as displayed and as a parsed number
 - Public channel description with contact details redacted
 - Avatar and banner image URLs when available
 - Verified-channel flag
 - Extraction timestamp
-- In detailed mode: total channel views, join date, country, and public social links
+- In detailed mode: total channel views, join date, country, named website links, and classified social/community profiles, including Facebook, Instagram, LinkedIn, X, YouTube, TikTok, Reddit, Twitch, Threads, and Discord
+- The backward-compatible `socialLinks` array still contains all accepted public external URLs; email addresses and email links are excluded
 
 ### Latest-video rows
 
@@ -64,7 +66,7 @@ Export the results as JSON, CSV, Excel, XML, or HTML, or consume them through th
 - Extraction timestamp
 - In detailed mode for the selected latest videos: exact public views, likes, description, tags, category, exact publish date, and public comment count when YouTube exposes a number
 
-Fast mode leaves the detailed-only fields as `null` or empty arrays. Detailed mode degrades gracefully: if one About or video page cannot be read, the Actor still saves the available fast fields instead of fabricating data.
+Fast mode still returns the derived public channel-tab URLs and leaves other detailed-only fields as `null`, empty arrays, or an empty social-profile object. Detailed mode degrades gracefully: if one About or video page cannot be read, the Actor still saves the available fast fields instead of fabricating data.
 
 ## Output dataset
 
@@ -135,7 +137,7 @@ Use direct channel URLs, schedule repeated runs, and compare subscriber counts, 
 
 ### Build a creator research table
 
-Use detailed mode to collect public channel size, total views, country, social links, descriptions, and recent video engagement for a defined set of channels.
+Use detailed mode to collect public channel size, total views, country, websites, classified social profiles, descriptions, and recent video engagement for a defined set of channels.
 
 ### Track competitor publishing
 
@@ -164,10 +166,13 @@ Failed channel extractions and duplicate channel aliases are not charged as `cha
 - Subscriber counts can be hidden or abbreviated.
 - Search results depend on region and YouTube ranking.
 - Fast runs are capped at 50 unique channels. Detailed runs are capped at 10 channels and 5 enriched video pages per channel. Requests are sequential and use bounded retries.
+- Channel-tab URLs are navigation links derived from the public channel ID. This release does not yet crawl the Shorts, Live Streams, Playlists, or Community tabs, and a channel may not expose every tab.
 - Shorts detection prefers YouTube's explicit `/shorts/` route. Duration is only a fallback because Shorts can now be up to three minutes and ordinary videos can be shorter than one minute.
 - If a channel page succeeds but its Videos tab is unavailable, the Actor saves and charges the channel metadata row without fabricating video rows.
 - Public comment totals are not present in every YouTube page payload. When YouTube exposes only the word `Comments` without a number, comment fields remain `null`.
 - Detailed fields are public page data, not private analytics, and can be hidden or changed by YouTube or the channel owner.
+- External-link classification recognizes Facebook, Instagram, LinkedIn, X/Twitter, YouTube, TikTok, Reddit, Twitch, Threads, and Discord; other accepted HTTP(S) links are returned as websites.
+- Email addresses and `mailto:` links are not collected. Email addresses and phone numbers found in public descriptions are redacted.
 - The Actor reads public pages only and does not access YouTube Studio, private analytics, account data, or private videos.
 
 ## API example

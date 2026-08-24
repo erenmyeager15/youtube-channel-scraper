@@ -1,7 +1,7 @@
 import { Actor, log } from 'apify';
 
 import { normalizeActorInput, normalizeYouTubeChannelUrl } from './run-config.js';
-import type { ActorInput, ChannelRecord, VideoRecord } from './types.js';
+import type { ActorInput, ChannelRecord, SocialProfiles, VideoRecord } from './types.js';
 import {
   extractChannelAbout,
   extractChannelMetadata,
@@ -12,6 +12,7 @@ import {
   fetchYouTubePlayerData,
 } from './youtube-http.js';
 import {
+  buildPublicChannelLinks,
   detectShorts,
   formatDuration,
   parseCompactCount,
@@ -115,9 +116,25 @@ try {
 
       const subscriberText = about?.subscriberText ?? metadata.subscriberText;
       const videoCountText = about?.videoCountText ?? metadata.videoCountText;
+      const publicChannelLinks = buildPublicChannelLinks(canonicalChannelUrl, metadata.externalId);
+      const emptySocialProfiles: SocialProfiles = {
+        facebook: [],
+        instagram: [],
+        linkedin: [],
+        x: [],
+        youtube: [],
+        tiktok: [],
+        reddit: [],
+        twitch: [],
+        threads: [],
+        discord: [],
+      };
 
       const channelRecord: ChannelRecord = {
         channelUrl: canonicalChannelUrl,
+        channelId: metadata.externalId,
+        canonicalChannelUrl,
+        ...publicChannelLinks,
         channelName: metadata.title,
         handle: metadata.handle,
         subscriberCount: subscriberText,
@@ -134,6 +151,9 @@ try {
         channelCategory: null,
         isVerified: metadata.isVerified,
         socialLinks: about?.socialLinks ?? [],
+        socialProfiles: about?.socialProfiles ?? emptySocialProfiles,
+        websiteLinks: about?.websiteLinks ?? [],
+        externalLinks: about?.externalLinks ?? [],
         scrapedAt: new Date().toISOString(),
       };
 

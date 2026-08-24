@@ -89,3 +89,16 @@ export function redactContactInfo(text: string | null): string | null {
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted]')
     .replace(/(?:\+?\d[\s().-]?){8,}\d/g, '[redacted]');
 }
+
+export function buildPublicChannelLinks(channelUrl: string, channelId: string | null) {
+  const baseUrl = (channelId
+    ? `https://www.youtube.com/channel/${encodeURIComponent(channelId)}`
+    : channelUrl).replace(/\/$/, '');
+  return {
+    videosUrl: `${baseUrl}/videos`,
+    shortsUrl: `${baseUrl}/shorts`,
+    liveStreamsUrl: `${baseUrl}/streams`,
+    playlistsUrl: `${baseUrl}/playlists`,
+    communityUrl: `${baseUrl}/community`,
+  };
+}

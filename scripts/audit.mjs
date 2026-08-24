@@ -15,6 +15,7 @@ const {
   normalizeYouTubeChannelUrl,
 } = await import('../dist/run-config.js');
 const {
+  buildPublicChannelLinks,
   classifyYouTubeDocument,
   detectShorts,
   formatDuration,
@@ -23,6 +24,7 @@ const {
   redactContactInfo,
 } = await import('../dist/youtube-utils.js');
 const {
+  classifyExternalLink,
   extractChannelAbout,
   extractChannelMetadata,
   extractInitialData,
@@ -142,6 +144,31 @@ assert.equal(detectShorts('/watch?v=abc', 30), false);
 assert.equal(detectShorts(null, 45), true);
 assert.equal(detectShorts(null, 120), false);
 assert.equal(redactContactInfo('Email test@example.com or call +1 212 555 0199'), 'Email [redacted] or call [redacted]');
+assert.equal(classifyExternalLink('https://m.facebook.com/fixture'), 'facebook');
+assert.equal(classifyExternalLink('https://instagram.com/fixture'), 'instagram');
+assert.equal(classifyExternalLink('https://linkedin.com/company/fixture'), 'linkedin');
+assert.equal(classifyExternalLink('https://twitter.com/fixture'), 'x');
+assert.equal(classifyExternalLink('https://youtu.be/video123'), 'youtube');
+assert.equal(classifyExternalLink('https://tiktok.com/@fixture'), 'tiktok');
+assert.equal(classifyExternalLink('https://reddit.com/r/fixture'), 'reddit');
+assert.equal(classifyExternalLink('https://twitch.tv/fixture'), 'twitch');
+assert.equal(classifyExternalLink('https://threads.net/@fixture'), 'threads');
+assert.equal(classifyExternalLink('https://discord.gg/fixture'), 'discord');
+assert.equal(classifyExternalLink('https://example.com/fixture'), 'website');
+assert.deepEqual(
+  buildPublicChannelLinks('https://www.youtube.com/@fixture', 'UC_FIXTURE'),
+  {
+    videosUrl: 'https://www.youtube.com/channel/UC_FIXTURE/videos',
+    shortsUrl: 'https://www.youtube.com/channel/UC_FIXTURE/shorts',
+    liveStreamsUrl: 'https://www.youtube.com/channel/UC_FIXTURE/streams',
+    playlistsUrl: 'https://www.youtube.com/channel/UC_FIXTURE/playlists',
+    communityUrl: 'https://www.youtube.com/channel/UC_FIXTURE/community',
+  },
+);
+assert.equal(
+  buildPublicChannelLinks('https://www.youtube.com/@fixture/', null).shortsUrl,
+  'https://www.youtube.com/@fixture/shorts',
+);
 
 const parserFixture = {
   metadata: {
@@ -170,6 +197,55 @@ const parserFixture = {
         videoCountText: '12 videos',
         canonicalChannelUrl: 'https://www.youtube.com/@fixture',
         links: [
+          {
+            channelExternalLinkViewModel: {
+              title: { content: 'Official website' },
+              link: { content: 'example.com/fixture' },
+            },
+          },
+          {
+            channelExternalLinkViewModel: {
+              title: { content: 'Instagram' },
+              link: { content: 'https://www.instagram.com/fixture/' },
+            },
+          },
+          {
+            channelExternalLinkViewModel: {
+              title: { content: 'X' },
+              link: {
+                content: 'X profile',
+                commandRuns: [{
+                  onTap: {
+                    innertubeCommand: {
+                      commandMetadata: {
+                        webCommandMetadata: {
+                          url: '/redirect?q=https%3A%2F%2Fx.com%2Ffixture',
+                        },
+                      },
+                    },
+                  },
+                }],
+              },
+            },
+          },
+          {
+            channelExternalLinkViewModel: {
+              title: { content: 'LinkedIn' },
+              link: { content: 'linkedin.com/company/fixture' },
+            },
+          },
+          {
+            channelExternalLinkViewModel: {
+              title: { content: 'person@example.com' },
+              link: { content: 'https://example.org/contact' },
+            },
+          },
+          {
+            channelExternalLinkViewModel: {
+              title: { content: 'Email' },
+              link: { content: 'person@example.com' },
+            },
+          },
           { channelExternalLinkViewModel: { link: { content: 'example.com/fixture' } } },
         ],
       },
@@ -198,7 +274,23 @@ const parsedAbout = extractChannelAbout(parsedFixture);
 assert.equal(parsedAbout?.totalViewsText, '12,345 views');
 assert.equal(parsedAbout?.joinDate, 'Jan 2, 2020');
 assert.equal(parsedAbout?.country, 'United States');
-assert.deepEqual(parsedAbout?.socialLinks, ['https://example.com/fixture']);
+assert.deepEqual(parsedAbout?.socialLinks, [
+  'https://example.com/fixture',
+  'https://www.instagram.com/fixture/',
+  'https://x.com/fixture',
+  'https://linkedin.com/company/fixture',
+  'https://example.org/contact',
+]);
+assert.deepEqual(parsedAbout?.websiteLinks, [
+  'https://example.com/fixture',
+  'https://example.org/contact',
+]);
+assert.deepEqual(parsedAbout?.socialProfiles.instagram, ['https://www.instagram.com/fixture/']);
+assert.deepEqual(parsedAbout?.socialProfiles.linkedin, ['https://linkedin.com/company/fixture']);
+assert.deepEqual(parsedAbout?.socialProfiles.x, ['https://x.com/fixture']);
+assert.equal(parsedAbout?.externalLinks[0]?.title, 'Official website');
+assert.equal(parsedAbout?.externalLinks[4]?.title, null);
+assert.doesNotMatch(JSON.stringify(parsedAbout), /person@example\.com/i);
 assert.equal(extractVideos(parsedFixture)[0].videoId, 'video123');
 assert.deepEqual(extractSearchChannelUrls(parsedFixture, 1), ['https://www.youtube.com/@search-result']);
 

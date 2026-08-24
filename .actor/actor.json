@@ -2,7 +2,7 @@
   "actorSpecification": 1,
   "name": "youtube-channel-scraper",
   "title": "YouTube Channel Scraper: Stats, Videos & Engagement",
-  "description": "Scrape public YouTube channels and latest videos in fast or detailed mode. Get subscribers, total views, join date, country, social links, video views, likes, descriptions, tags, and category.",
+  "description": "Scrape public YouTube channels and latest videos in fast or detailed mode. Get channel-tab links, websites, classified social profiles, subscribers, total views, country, video engagement, tags, and category—without collecting emails.",
   "version": "1.0",
   "buildTag": "latest",
   "dockerfile": "Dockerfile",

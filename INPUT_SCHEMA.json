@@ -28,7 +28,7 @@
     },
     "mode": {
       "title": "Scrape Mode",
-      "description": "Fast reads channel video grids with minimal requests. Detailed also reads About pages and selected video pages for total views, join date, country, social links, likes, descriptions, tags, and category.",
+      "description": "Fast reads channel video grids and returns public channel-tab links with minimal requests. Detailed also reads About pages and selected video pages for total views, join date, country, websites, classified social profiles, likes, descriptions, tags, and category. Email addresses are not collected.",
       "type": "string",
       "enum": ["fast", "detailed"],
       "enumTitles": ["Fast - channel stats and video summaries", "Detailed - engagement and About data"],

@@ -2,6 +2,7 @@ import type { ProxyConfiguration } from 'apify';
 import { gotScraping } from 'crawlee';
 
 import { classifyYouTubeDocument } from './youtube-utils.js';
+import type { ChannelExternalLink, ExternalLinkPlatform, SocialProfiles } from './types.js';
 
 type JsonObject = Record<string, any>;
 
@@ -19,6 +20,9 @@ export interface ChannelAboutMetadata {
   country: string | null;
   description: string | null;
   socialLinks: string[];
+  socialProfiles: SocialProfiles;
+  websiteLinks: string[];
+  externalLinks: ChannelExternalLink[];
   canonicalUrl: string | null;
 }
 
@@ -243,15 +247,24 @@ export function extractChannelAbout(initialData: JsonObject): ChannelAboutMetada
   if (!aboutView) return null;
   const about = aboutView as JsonObject;
   const links = Array.isArray(about.links) ? about.links : Array.isArray(about.primaryLinks) ? about.primaryLinks : [];
-  const socialLinks = [...new Set(links
+  const externalLinks = deduplicateExternalLinks(links
     .map((item: JsonObject) => {
       const linkView = item?.channelExternalLinkViewModel ?? item;
-      return normalizeExternalUrl(
+      const url = normalizeExternalUrl(
         textContent(linkView?.link),
         findFirstHttpUrl(linkView?.link ?? linkView),
       );
+      if (!url) return null;
+      const rawTitle = textContent(linkView?.title);
+      const title = rawTitle && !containsEmailAddress(rawTitle) ? rawTitle.trim() : null;
+      return { title: title || null, url, platform: classifyExternalLink(url) };
     })
-    .filter((value: string | null): value is string => value !== null))];
+    .filter((value: ChannelExternalLink | null): value is ChannelExternalLink => value !== null));
+  const socialLinks = externalLinks.map(({ url }) => url);
+  const websiteLinks = externalLinks
+    .filter(({ platform }) => platform === 'website')
+    .map(({ url }) => url);
+  const socialProfiles = buildSocialProfiles(externalLinks);
 
   const joinedText = textContent(about.joinedDateText);
   return {
@@ -262,6 +275,9 @@ export function extractChannelAbout(initialData: JsonObject): ChannelAboutMetada
     country: textContent(about.country),
     description: textContent(about.description),
     socialLinks,
+    socialProfiles,
+    websiteLinks,
+    externalLinks,
     canonicalUrl: typeof about.canonicalChannelUrl === 'string' ? about.canonicalChannelUrl : null,
   };
 }
@@ -689,6 +705,7 @@ function normalizeExternalUrl(displayValue: string | null, endpointValue: string
   for (const rawValue of [displayValue, endpointValue]) {
     if (!rawValue) continue;
     let candidate = rawValue.trim();
+    if (containsEmailAddress(candidate) || /^mailto:/i.test(candidate)) continue;
     try {
       const redirectUrl = new URL(candidate, 'https://www.youtube.com');
       if (/^(?:www\.)?youtube\.com$/i.test(redirectUrl.hostname) && redirectUrl.pathname === '/redirect') {
@@ -697,13 +714,69 @@ function normalizeExternalUrl(displayValue: string | null, endpointValue: string
       if (!candidate) continue;
       if (!/^https?:\/\//i.test(candidate)) candidate = `https://${candidate.replace(/^\/+/, '')}`;
       const parsed = new URL(candidate);
-      if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) continue;
+      if (
+        !['http:', 'https:'].includes(parsed.protocol)
+        || parsed.username
+        || parsed.password
+        || !parsed.hostname.includes('.')
+        || containsEmailAddress(decodeURIComponent(parsed.toString()))
+      ) continue;
+      parsed.hash = '';
       return parsed.toString();
     } catch {
       // Try the next available representation of the public link.
     }
   }
   return null;
+}
+
+export function classifyExternalLink(url: string): ExternalLinkPlatform {
+  const hostname = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+  if (hostname === 'facebook.com' || hostname.endsWith('.facebook.com')) return 'facebook';
+  if (hostname === 'instagram.com' || hostname.endsWith('.instagram.com')) return 'instagram';
+  if (hostname === 'linkedin.com' || hostname.endsWith('.linkedin.com')) return 'linkedin';
+  if (hostname === 'x.com' || hostname.endsWith('.x.com')
+    || hostname === 'twitter.com' || hostname.endsWith('.twitter.com')) return 'x';
+  if (hostname === 'youtube.com' || hostname.endsWith('.youtube.com') || hostname === 'youtu.be') return 'youtube';
+  if (hostname === 'tiktok.com' || hostname.endsWith('.tiktok.com')) return 'tiktok';
+  if (hostname === 'reddit.com' || hostname.endsWith('.reddit.com')) return 'reddit';
+  if (hostname === 'twitch.tv' || hostname.endsWith('.twitch.tv')) return 'twitch';
+  if (hostname === 'threads.net' || hostname.endsWith('.threads.net')) return 'threads';
+  if (hostname === 'discord.com' || hostname.endsWith('.discord.com') || hostname === 'discord.gg') return 'discord';
+  return 'website';
+}
+
+function deduplicateExternalLinks(links: ChannelExternalLink[]): ChannelExternalLink[] {
+  const unique = new Map<string, ChannelExternalLink>();
+  for (const link of links) {
+    const key = link.url.toLowerCase();
+    const existing = unique.get(key);
+    if (!existing || (!existing.title && link.title)) unique.set(key, link);
+  }
+  return [...unique.values()];
+}
+
+function buildSocialProfiles(links: ChannelExternalLink[]): SocialProfiles {
+  const profiles: SocialProfiles = {
+    facebook: [],
+    instagram: [],
+    linkedin: [],
+    x: [],
+    youtube: [],
+    tiktok: [],
+    reddit: [],
+    twitch: [],
+    threads: [],
+    discord: [],
+  };
+  for (const link of links) {
+    if (link.platform !== 'website') profiles[link.platform].push(link.url);
+  }
+  return profiles;
+}
+
+function containsEmailAddress(value: string): boolean {
+  return /[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(value);
 }
 
 function findJsonObjectEnd(source: string, start: number): number {
