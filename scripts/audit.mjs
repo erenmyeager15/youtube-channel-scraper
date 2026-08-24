@@ -46,6 +46,7 @@ assert.equal(actor.defaultRunOptions.memoryMbytes, 256);
 assert.equal(actor.minMemoryMbytes, 256);
 assert.equal(actor.maxMemoryMbytes, 1024);
 assert.equal(actor.defaultRunOptions.timeoutSecs, 900);
+assert.equal(JSON.parse(actor.exampleRunInput.body).mode, 'detailed');
 assert.equal(schema.properties.channelUrls.maxItems, MAX_CHANNELS_PER_RUN);
 assert.equal(schema.properties.searchKeywords.maxItems, MAX_SEARCH_KEYWORDS);
 assert.deepEqual(schema.properties.mode.enum, ['fast', 'detailed']);
