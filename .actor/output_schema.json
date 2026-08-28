@@ -1,13 +1,13 @@
 {
   "actorOutputSchemaVersion": 1,
   "title": "YouTube Channel Scraper Output",
-  "description": "Structured public YouTube channel stats, channel-tab links, websites, classified social profiles, and latest-video summaries. Email addresses are not collected.",
+  "description": "Structured public YouTube channel, video, Short, live-stream, playlist, and channel-authored community-post records. Email addresses and commenter identities are not collected.",
   "type": "object",
   "properties": {
     "results": {
       "type": "string",
-      "title": "YouTube channel and latest-video records",
-      "description": "Dataset items containing public YouTube channel stats, public links, social profiles, and latest-video summaries.",
+      "title": "YouTube channel and content records",
+      "description": "Dataset items containing public channel stats, links, social profiles, videos, Shorts, live streams, playlists, and channel-authored community posts.",
       "template": "{{links.apiDefaultDatasetUrl}}/items"
     }
   }

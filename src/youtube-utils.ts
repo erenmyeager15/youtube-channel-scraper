@@ -99,6 +99,6 @@ export function buildPublicChannelLinks(channelUrl: string, channelId: string | 
     shortsUrl: `${baseUrl}/shorts`,
     liveStreamsUrl: `${baseUrl}/streams`,
     playlistsUrl: `${baseUrl}/playlists`,
-    communityUrl: `${baseUrl}/community`,
+    communityUrl: `${baseUrl}/posts`,
   };
 }

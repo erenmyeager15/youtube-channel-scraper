@@ -41,6 +41,24 @@ export interface VideoDetailMetadata {
   category: string | null;
 }
 
+export interface PlaylistMetadata {
+  playlistId: string;
+  title: string | null;
+  videoCountText: string | null;
+  thumbnailUrl: string | null;
+}
+
+export interface CommunityPostMetadata {
+  postId: string;
+  text: string | null;
+  publishedText: string | null;
+  likeCountText: string | null;
+  commentCountText: string | null;
+  attachmentType: 'image' | 'video' | 'playlist' | 'poll' | 'none';
+  attachmentUrl: string | null;
+  imageUrl: string | null;
+}
+
 export interface YouTubePlayerApiConfig {
   apiKey: string;
   clientVersion: string;
@@ -436,30 +454,69 @@ export function extractVideos(initialData: JsonObject) {
     lengthText: string | null;
     thumbnailUrl: string | null;
     navigationUrl: string | null;
+    liveStatus: 'live' | 'upcoming' | 'streamed' | null;
   }> = [];
   const seen = new Set<string>();
 
+  const addVideo = (renderer: JsonObject, videoId: string, overrides: Partial<{
+    title: string | null;
+    viewText: string | null;
+    publishedText: string | null;
+    lengthText: string | null;
+    thumbnailUrl: string | null;
+    navigationUrl: string | null;
+  }> = {}): void => {
+    if (!videoId || seen.has(videoId)) return;
+    seen.add(videoId);
+    const thumbnails = renderer.thumbnail?.thumbnails
+      ?? renderer.thumbnailViewModel?.image?.sources
+      ?? renderer.contentImage?.thumbnailViewModel?.image?.sources
+      ?? [];
+    output.push({
+      videoId,
+      title: overrides.title ?? textContent(renderer.title) ?? textContent(renderer.headline),
+      viewText: overrides.viewText ?? textContent(renderer.viewCountText),
+      publishedText: overrides.publishedText ?? textContent(renderer.publishedTimeText),
+      lengthText: overrides.lengthText ?? textContent(renderer.lengthText)
+        ?? findText(renderer, /^\d{1,2}:\d{2}(?::\d{2})?$/),
+      thumbnailUrl: overrides.thumbnailUrl
+        ?? (thumbnails.length ? thumbnails[thumbnails.length - 1]?.url ?? null : null),
+      navigationUrl: overrides.navigationUrl ?? findNavigationUrl(renderer, videoId),
+      liveStatus: detectLiveStatus(renderer),
+    });
+  };
+
   walkObjects(initialData, (object) => {
     const videoRenderer = object.videoRenderer;
-    if (videoRenderer?.videoId && !seen.has(videoRenderer.videoId)) {
-      seen.add(videoRenderer.videoId);
-      const thumbnails = videoRenderer.thumbnail?.thumbnails ?? [];
-      output.push({
-        videoId: videoRenderer.videoId,
-        title: videoRenderer.title?.runs?.[0]?.text ?? null,
-        viewText: videoRenderer.viewCountText?.simpleText
-          ?? videoRenderer.viewCountText?.runs?.map((run: JsonObject) => run.text).join('')
-          ?? null,
-        publishedText: videoRenderer.publishedTimeText?.simpleText ?? null,
-        lengthText: videoRenderer.lengthText?.simpleText ?? null,
-        thumbnailUrl: thumbnails.length ? thumbnails[thumbnails.length - 1].url : null,
-        navigationUrl: findNavigationUrl(videoRenderer, videoRenderer.videoId),
+    if (videoRenderer?.videoId) addVideo(videoRenderer, videoRenderer.videoId);
+
+    const gridVideo = object.gridVideoRenderer;
+    if (gridVideo?.videoId) addVideo(gridVideo, gridVideo.videoId);
+
+    const reelItem = object.reelItemRenderer;
+    if (reelItem?.videoId) {
+      addVideo(reelItem, reelItem.videoId, {
+        title: textContent(reelItem.headline),
+        navigationUrl: `/shorts/${reelItem.videoId}`,
+      });
+    }
+
+    const shortsLockup = object.shortsLockupViewModel;
+    const shortsVideoId = shortsLockup?.onTap?.innertubeCommand?.reelWatchEndpoint?.videoId;
+    if (shortsVideoId) {
+      const thumbnailSources = shortsLockup.thumbnailViewModel?.thumbnailViewModel?.image?.sources ?? [];
+      addVideo(shortsLockup, shortsVideoId, {
+        title: textContent(shortsLockup.overlayMetadata?.primaryText),
+        viewText: textContent(shortsLockup.overlayMetadata?.secondaryText),
+        thumbnailUrl: thumbnailSources.length
+          ? thumbnailSources[thumbnailSources.length - 1]?.url ?? null
+          : null,
+        navigationUrl: `/shorts/${shortsVideoId}`,
       });
     }
 
     const lockup = object.lockupViewModel;
     if (lockup?.contentId && /VIDEO/i.test(lockup.contentType ?? '') && !seen.has(lockup.contentId)) {
-      seen.add(lockup.contentId);
       const metadata = lockup.metadata?.lockupMetadataViewModel;
       const rows = metadata?.metadata?.contentMetadataViewModel?.metadataRows ?? [];
       let viewText: string | null = null;
@@ -472,8 +529,7 @@ export function extractVideos(initialData: JsonObject) {
         }
       }
       const thumbnailSources = lockup.contentImage?.thumbnailViewModel?.image?.sources ?? [];
-      output.push({
-        videoId: lockup.contentId,
+      addVideo(lockup, lockup.contentId, {
         title: metadata?.title?.content ?? null,
         viewText,
         publishedText,
@@ -482,6 +538,94 @@ export function extractVideos(initialData: JsonObject) {
         navigationUrl: findNavigationUrl(lockup, lockup.contentId),
       });
     }
+  });
+
+  return output;
+}
+
+export function extractPlaylists(initialData: JsonObject): PlaylistMetadata[] {
+  const output: PlaylistMetadata[] = [];
+  const seen = new Set<string>();
+
+  const addPlaylist = (renderer: JsonObject, playlistId: string): void => {
+    if (!playlistId || seen.has(playlistId)) return;
+    seen.add(playlistId);
+    const thumbnails = renderer.thumbnail?.thumbnails
+      ?? renderer.thumbnails?.[0]?.thumbnails
+      ?? renderer.contentImage?.thumbnailViewModel?.image?.sources
+      ?? renderer.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel?.image?.sources
+      ?? [];
+    output.push({
+      playlistId,
+      title: textContent(renderer.title)
+        ?? textContent(renderer.metadata?.lockupMetadataViewModel?.title),
+      videoCountText: textContent(renderer.videoCountText)
+        ?? findText(renderer, /^\s*[\d,.]+\s+(?:videos?|episodes?)\s*$/i),
+      thumbnailUrl: thumbnails.length ? thumbnails[thumbnails.length - 1]?.url ?? null : null,
+    });
+  };
+
+  walkObjects(initialData, (object) => {
+    for (const key of ['playlistRenderer', 'gridPlaylistRenderer']) {
+      const renderer = object[key];
+      if (renderer?.playlistId) addPlaylist(renderer, renderer.playlistId);
+    }
+    const lockup = object.lockupViewModel;
+    if (lockup?.contentId && /PLAYLIST/i.test(lockup.contentType ?? '')) {
+      addPlaylist(lockup, lockup.contentId);
+    }
+  });
+
+  return output;
+}
+
+export function extractCommunityPosts(initialData: JsonObject): CommunityPostMetadata[] {
+  const output: CommunityPostMetadata[] = [];
+  const seen = new Set<string>();
+
+  walkObjects(initialData, (object) => {
+    const post = object.backstagePostRenderer ?? object.postRenderer;
+    const postId = post?.postId ?? post?.id;
+    if (typeof postId !== 'string' || !postId || seen.has(postId)) return;
+    seen.add(postId);
+
+    let attachmentType: CommunityPostMetadata['attachmentType'] = 'none';
+    let attachmentUrl: string | null = null;
+    let imageUrl: string | null = null;
+    walkObjects(post, (child) => {
+      if (attachmentType === 'none' && (child.pollRenderer || child.backstagePollRenderer)) {
+        attachmentType = 'poll';
+      }
+      const video = child.videoRenderer ?? child.gridVideoRenderer ?? child.reelItemRenderer;
+      if (video?.videoId && attachmentType !== 'video') {
+        attachmentType = 'video';
+        attachmentUrl = video.navigationEndpoint?.commandMetadata?.webCommandMetadata?.url
+          ? new URL(video.navigationEndpoint.commandMetadata.webCommandMetadata.url, 'https://www.youtube.com').toString()
+          : `https://www.youtube.com/watch?v=${encodeURIComponent(video.videoId)}`;
+      }
+      const playlist = child.playlistRenderer ?? child.gridPlaylistRenderer;
+      if (playlist?.playlistId && attachmentType === 'none') {
+        attachmentType = 'playlist';
+        attachmentUrl = `https://www.youtube.com/playlist?list=${encodeURIComponent(playlist.playlistId)}`;
+      }
+      const imageRenderer = child.backstageImageRenderer ?? child.imageRenderer;
+      const thumbnails = imageRenderer?.image?.thumbnails ?? imageRenderer?.thumbnails ?? [];
+      if (!imageUrl && thumbnails.length) {
+        imageUrl = thumbnails[thumbnails.length - 1]?.url ?? null;
+        if (attachmentType === 'none') attachmentType = 'image';
+      }
+    });
+
+    output.push({
+      postId,
+      text: textContent(post.contentText) ?? textContent(post.content),
+      publishedText: textContent(post.publishedTimeText) ?? textContent(post.publishedTime),
+      likeCountText: textContent(post.voteCount) ?? textContent(post.likeCount),
+      commentCountText: textContent(post.replyCount) ?? textContent(post.commentCount),
+      attachmentType,
+      attachmentUrl,
+      imageUrl,
+    });
   });
 
   return output;
@@ -542,6 +686,29 @@ function findNavigationUrl(value: unknown, videoId: string): string | null {
     }
   }, () => shortsUrl !== null);
   return shortsUrl ?? watchUrl;
+}
+
+function detectLiveStatus(value: unknown): 'live' | 'upcoming' | 'streamed' | null {
+  let status: 'live' | 'upcoming' | 'streamed' | null = null;
+  walkObjects(value, (object) => {
+    if (status) return;
+    if (object.isLiveNow === true || /LIVE_NOW/i.test(String(object.style ?? ''))) {
+      status = 'live';
+      return;
+    }
+    if (object.upcomingEventData || /UPCOMING/i.test(String(object.style ?? ''))) {
+      status = 'upcoming';
+      return;
+    }
+    for (const child of Object.values(object)) {
+      if (typeof child !== 'string') continue;
+      if (/^(?:LIVE|LIVE NOW)$/i.test(child.trim())) status = 'live';
+      else if (/^UPCOMING$/i.test(child.trim())) status = 'upcoming';
+      else if (/^STREAMED\b/i.test(child.trim())) status = 'streamed';
+      if (status) return;
+    }
+  }, () => status !== null);
+  return status;
 }
 
 function textContent(value: unknown): string | null {

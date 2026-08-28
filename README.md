@@ -1,12 +1,12 @@
-# YouTube Channel Scraper: Stats, Videos & Engagement
+# YouTube Scraper: Channels, Shorts, Live & Posts
 
-Scrape public YouTube channel stats, channel-tab links, social profiles, and latest videos without a YouTube login or API key. Provide channel URLs, `@handles`, or search keywords and choose a fast monitoring run or a richer detailed run with About-page and video engagement data.
+Scrape public YouTube channels, videos, Shorts, live streams, playlists, and channel-authored community posts without a YouTube login or API key. Provide channel URLs, `@handles`, or search keywords, select only the content you need, and choose fast monitoring or richer detailed enrichment.
 
 The Actor uses bounded HTTP requests to read public YouTube pages and parses YouTube's embedded public data. It returns only fields YouTube exposes publicly and marks unavailable fields as `null`.
 
 ## Quick start
 
-Run one channel with one latest video:
+Run one channel with a small mix of public content:
 
 ```json
 {
@@ -18,7 +18,13 @@ Run one channel with one latest video:
   "maxChannels": 1,
   "maxVideosPerChannel": 1,
   "maxDetailedVideosPerChannel": 1,
-  "includeShorts": false,
+  "includeShorts": true,
+  "maxShortsPerChannel": 2,
+  "includeLiveStreams": false,
+  "includePlaylists": true,
+  "maxPlaylistsPerChannel": 2,
+  "includeCommunityPosts": true,
+  "maxCommunityPostsPerChannel": 2,
   "proxyConfiguration": {
     "useApifyProxy": false
   }
@@ -33,7 +39,14 @@ For richer creator research, switch to detailed mode:
   "mode": "detailed",
   "maxVideosPerChannel": 5,
   "maxDetailedVideosPerChannel": 2,
-  "includeShorts": false
+  "includeShorts": true,
+  "maxShortsPerChannel": 5,
+  "includeLiveStreams": true,
+  "maxLiveStreamsPerChannel": 5,
+  "includePlaylists": true,
+  "maxPlaylistsPerChannel": 5,
+  "includeCommunityPosts": true,
+  "maxCommunityPostsPerChannel": 5
 }
 ```
 
@@ -54,7 +67,7 @@ Export the results as JSON, CSV, Excel, XML, or HTML, or consume them through th
 - In detailed mode: total channel views, join date, country, named website links, and classified social/community profiles, including Facebook, Instagram, LinkedIn, X, YouTube, TikTok, Reddit, Twitch, Threads, and Discord
 - The backward-compatible `socialLinks` array still contains all accepted public external URLs; email addresses and email links are excluded
 
-### Latest-video rows
+### Video, Shorts, and live-stream rows
 
 - Channel URL and channel name
 - Video URL and title
@@ -62,19 +75,35 @@ Export the results as JSON, CSV, Excel, XML, or HTML, or consume them through th
 - Duration in seconds and formatted text
 - Relative published date shown by YouTube
 - Thumbnail URL
-- Shorts detection
+- Content classification as `video`, `short`, or `live_stream`
+- Live status when YouTube exposes it
 - Extraction timestamp
 - In detailed mode for the selected latest videos: exact public views, likes, description, tags, category, exact publish date, and public comment count when YouTube exposes a number
 
-Fast mode still returns the derived public channel-tab URLs and leaves other detailed-only fields as `null`, empty arrays, or an empty social-profile object. Detailed mode degrades gracefully: if one About or video page cannot be read, the Actor still saves the available fast fields instead of fabricating data.
+### Playlist rows
+
+- Playlist URL, ID, title, thumbnail, and public video count
+- Channel URL and channel name
+- Extraction timestamp
+
+### Community-post rows
+
+- Post URL, ID, channel-authored public text, thumbnail or attachment URL
+- Published-date text and public like/comment counts when YouTube exposes them
+- Channel URL and channel name
+- Extraction timestamp
+
+Fast mode collects selected content grids efficiently and leaves detailed-only fields as `null`, empty arrays, or an empty social-profile object. Detailed mode enriches the About page and a bounded number of normal video pages. If one optional tab or video page cannot be read, the Actor still saves the available records instead of fabricating data.
 
 ## Output dataset
 
-One run writes both record types to the default dataset:
+One run can write four record types to the default dataset:
 
 - The `Channels` view shows channel-level records.
-- The `Videos` view shows the latest-video records.
-- A video row can be identified by the presence of `videoUrl`.
+- The `Videos` view shows normal videos, Shorts, and live-stream records.
+- The `Playlists` view shows playlist records.
+- The `Community posts` view shows channel-authored post records.
+- Every row has an explicit `recordType` field for reliable filtering.
 
 ### Verified channel sample
 
@@ -124,7 +153,14 @@ Counts, titles, thumbnails, and relative dates can change when YouTube updates t
 | `maxChannels` | integer | `1` | Maximum channels scraped per search keyword, from 1 to 50 |
 | `maxVideosPerChannel` | integer | `1` | Maximum latest rows saved from the currently loaded public Videos grid, from 1 to 100 |
 | `maxDetailedVideosPerChannel` | integer | `1` | Detailed mode only: enrich the first 0 to 5 saved video rows per channel |
-| `includeShorts` | boolean | `false` | Include videos detected as Shorts from YouTube routing, with duration used only as a fallback |
+| `includeShorts` | boolean | `false` | Read the public Shorts tab and save Shorts as separate video records |
+| `maxShortsPerChannel` | integer | `10` | Maximum Shorts saved per channel, from 1 to 50 |
+| `includeLiveStreams` | boolean | `false` | Read the public Live tab and save past, upcoming, or active streams |
+| `maxLiveStreamsPerChannel` | integer | `10` | Maximum live-stream rows saved per channel, from 1 to 50 |
+| `includePlaylists` | boolean | `false` | Read the public Playlists tab and save playlist records |
+| `maxPlaylistsPerChannel` | integer | `10` | Maximum playlists saved per channel, from 1 to 50 |
+| `includeCommunityPosts` | boolean | `false` | Read the public Posts tab and save channel-authored community posts |
+| `maxCommunityPostsPerChannel` | integer | `10` | Maximum community posts saved per channel, from 1 to 50 |
 | `proxyConfiguration` | object | Direct | Optional Apify Proxy, country, custom-proxy, or direct settings |
 
 Provide at least one channel URL, handle, or search keyword. Direct channel inputs are more predictable than keyword search. Search results vary by region and ranking. Fast mode handles at most 50 unique channels per run. Detailed mode handles at most 10 channels and enriches at most 5 video rows per channel.
@@ -154,9 +190,9 @@ This Actor uses Pay Per Event pricing.
 | Event | Price |
 | --- | ---: |
 | Actor start | $0.00005 per GB of memory |
-| Each successfully saved `channel-scraped` channel | $0.003 |
+| Each successfully saved `channel-scraped` channel | $0.003, with Store-tier discounts down to $0.00255 |
 
-The Actor defaults to 256 MB of memory and can be raised to 1 GB for larger batches. Actor-start billing uses a minimum of one event, so the startup charge remains approximately $0.00005 per run at the default memory. Available fast or detailed latest-video rows are included in the channel charge. A one-channel run is therefore approximately $0.00305 before any applicable account-level charges.
+The Actor defaults to 256 MB of memory and can be raised to 1 GB for larger batches. Actor-start billing uses a minimum of one event, so the startup charge remains approximately $0.00005 per run at the default memory. All selected content rows are included in the channel charge—there is no extra per-video, per-Short, per-playlist, or per-post event fee. A one-channel run on the FREE Store tier is therefore approximately $0.00305 before any applicable account-level charges.
 
 Failed channel extractions and duplicate channel aliases are not charged as `channel-scraped` events. When a maximum-cost limit is reached, the Actor finishes cleanly after storing the current paid channel and its available video rows, then skips queued channel work.
 
@@ -166,10 +202,12 @@ Failed channel extractions and duplicate channel aliases are not charged as `cha
 - Subscriber counts can be hidden or abbreviated.
 - Search results depend on region and YouTube ranking.
 - Fast runs are capped at 50 unique channels. Detailed runs are capped at 10 channels and 5 enriched video pages per channel. Requests are sequential and use bounded retries.
-- Channel-tab URLs are navigation links derived from the public channel ID. This release does not yet crawl the Shorts, Live Streams, Playlists, or Community tabs, and a channel may not expose every tab.
+- Optional Shorts, Live, Playlists, and Posts sections each use one bounded public-tab request per channel. A channel may not expose every tab.
+- Content tabs currently read YouTube's initially loaded public grid. The Actor does not yet follow continuation pages, so the configured maximum is also bounded by what YouTube includes in that first response.
 - Shorts detection prefers YouTube's explicit `/shorts/` route. Duration is only a fallback because Shorts can now be up to three minutes and ordinary videos can be shorter than one minute.
 - If a channel page succeeds but its Videos tab is unavailable, the Actor saves and charges the channel metadata row without fabricating video rows.
-- Public comment totals are not present in every YouTube page payload. When YouTube exposes only the word `Comments` without a number, comment fields remain `null`.
+- Public like and comment totals are not present in every YouTube page payload. When YouTube exposes a label without a number, count fields remain `null`.
+- Community output contains only posts authored by the selected public channel. It does not collect commenter identities or comment text.
 - Detailed fields are public page data, not private analytics, and can be hidden or changed by YouTube or the channel owner.
 - External-link classification recognizes Facebook, Instagram, LinkedIn, X/Twitter, YouTube, TikTok, Reddit, Twitch, Threads, and Discord; other accepted HTTP(S) links are returned as websites.
 - Email addresses and `mailto:` links are not collected. Email addresses and phone numbers found in public descriptions are redacted.
@@ -187,7 +225,14 @@ curl -X POST "https://api.apify.com/v2/acts/fascinating_lentil~youtube-channel-s
     "maxChannels": 1,
     "maxVideosPerChannel": 3,
     "maxDetailedVideosPerChannel": 1,
-    "includeShorts": false,
+    "includeShorts": true,
+    "maxShortsPerChannel": 3,
+    "includeLiveStreams": true,
+    "maxLiveStreamsPerChannel": 3,
+    "includePlaylists": true,
+    "maxPlaylistsPerChannel": 3,
+    "includeCommunityPosts": true,
+    "maxCommunityPostsPerChannel": 3,
     "proxyConfiguration": {"useApifyProxy": false}
   }'
 ```

@@ -8,6 +8,10 @@ export const MAX_SEARCH_KEYWORDS = 10;
 export const MAX_CHANNELS_PER_SEARCH = 50;
 export const MAX_VIDEOS_PER_CHANNEL = 100;
 export const MAX_DETAILED_VIDEOS_PER_CHANNEL = 5;
+export const MAX_SHORTS_PER_CHANNEL = 50;
+export const MAX_LIVE_STREAMS_PER_CHANNEL = 50;
+export const MAX_PLAYLISTS_PER_CHANNEL = 50;
+export const MAX_COMMUNITY_POSTS_PER_CHANNEL = 50;
 
 type ActorProxyOptions = ProxyConfigurationOptions & { useApifyProxy?: boolean };
 
@@ -19,6 +23,13 @@ export interface NormalizedActorInput {
   maxVideosPerChannel: number;
   maxDetailedVideosPerChannel: number;
   includeShorts: boolean;
+  maxShortsPerChannel: number;
+  includeLiveStreams: boolean;
+  maxLiveStreamsPerChannel: number;
+  includePlaylists: boolean;
+  maxPlaylistsPerChannel: number;
+  includeCommunityPosts: boolean;
+  maxCommunityPostsPerChannel: number;
   proxyOptions: ActorProxyOptions | undefined;
   maxRequestsPerCrawl: number;
 }
@@ -74,6 +85,27 @@ export function normalizeActorInput(input: ActorInput): NormalizedActorInput {
   if (input.includeShorts !== undefined && typeof input.includeShorts !== 'boolean') {
     throw new Error('includeShorts must be a boolean.');
   }
+  for (const [fieldName, value] of [
+    ['includeLiveStreams', input.includeLiveStreams],
+    ['includePlaylists', input.includePlaylists],
+    ['includeCommunityPosts', input.includeCommunityPosts],
+  ] as const) {
+    if (value !== undefined && typeof value !== 'boolean') {
+      throw new Error(`${fieldName} must be a boolean.`);
+    }
+  }
+  const maxShortsPerChannel = readBoundedInteger(
+    input.maxShortsPerChannel, 1, MAX_SHORTS_PER_CHANNEL, 10, 'maxShortsPerChannel',
+  );
+  const maxLiveStreamsPerChannel = readBoundedInteger(
+    input.maxLiveStreamsPerChannel, 1, MAX_LIVE_STREAMS_PER_CHANNEL, 10, 'maxLiveStreamsPerChannel',
+  );
+  const maxPlaylistsPerChannel = readBoundedInteger(
+    input.maxPlaylistsPerChannel, 1, MAX_PLAYLISTS_PER_CHANNEL, 10, 'maxPlaylistsPerChannel',
+  );
+  const maxCommunityPostsPerChannel = readBoundedInteger(
+    input.maxCommunityPostsPerChannel, 1, MAX_COMMUNITY_POSTS_PER_CHANNEL, 10, 'maxCommunityPostsPerChannel',
+  );
 
   if (channelUrls.length === 0 && searchKeywords.length === 0) {
     throw new Error('Provide at least one YouTube channel URL, @handle, or search keyword.');
@@ -87,6 +119,13 @@ export function normalizeActorInput(input: ActorInput): NormalizedActorInput {
     maxVideosPerChannel,
     maxDetailedVideosPerChannel,
     includeShorts: input.includeShorts ?? false,
+    maxShortsPerChannel,
+    includeLiveStreams: input.includeLiveStreams ?? false,
+    maxLiveStreamsPerChannel,
+    includePlaylists: input.includePlaylists ?? false,
+    maxPlaylistsPerChannel,
+    includeCommunityPosts: input.includeCommunityPosts ?? false,
+    maxCommunityPostsPerChannel,
     proxyOptions: buildProxyConfigurationOptions(input.proxyConfiguration),
     maxRequestsPerCrawl: (mode === 'detailed' ? MAX_DETAILED_CHANNELS_PER_RUN : MAX_CHANNELS_PER_RUN)
       + searchKeywords.length,

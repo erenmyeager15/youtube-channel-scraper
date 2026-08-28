@@ -1,10 +1,19 @@
 import { Actor, log } from 'apify';
 
 import { normalizeActorInput, normalizeYouTubeChannelUrl } from './run-config.js';
-import type { ActorInput, ChannelRecord, SocialProfiles, VideoRecord } from './types.js';
+import type {
+  ActorInput,
+  ChannelRecord,
+  CommunityPostRecord,
+  PlaylistRecord,
+  SocialProfiles,
+  VideoRecord,
+} from './types.js';
 import {
   extractChannelAbout,
   extractChannelMetadata,
+  extractCommunityPosts,
+  extractPlaylists,
   extractSearchChannelUrls,
   extractVideoDetails,
   extractVideos,
@@ -131,6 +140,7 @@ try {
       };
 
       const channelRecord: ChannelRecord = {
+        recordType: 'channel',
         channelUrl: canonicalChannelUrl,
         channelId: metadata.externalId,
         canonicalChannelUrl,
@@ -172,20 +182,60 @@ try {
         canonicalChannelUrl,
         metadata.title,
         normalized.maxVideosPerChannel,
-        normalized.includeShorts,
+        'video',
       );
 
+      if (normalized.includeShorts) {
+        try {
+          const shortsPage = await fetchYouTubePage(publicChannelLinks.shortsUrl, proxyConfiguration);
+          videoRecords.push(...buildVideoRecords(
+            shortsPage.initialData,
+            canonicalChannelUrl,
+            metadata.title,
+            normalized.maxShortsPerChannel,
+            'short',
+          ));
+        } catch (error) {
+          detailedRequestFailureCount += 1;
+          log.warning(`Shorts were unavailable for ${canonicalChannelUrl}: ${String(error)}`);
+        }
+      }
+
+      if (normalized.includeLiveStreams) {
+        try {
+          const streamsPage = await fetchYouTubePage(publicChannelLinks.liveStreamsUrl, proxyConfiguration);
+          videoRecords.push(...buildVideoRecords(
+            streamsPage.initialData,
+            canonicalChannelUrl,
+            metadata.title,
+            normalized.maxLiveStreamsPerChannel,
+            'live_stream',
+          ));
+        } catch (error) {
+          detailedRequestFailureCount += 1;
+          log.warning(`Live streams were unavailable for ${canonicalChannelUrl}: ${String(error)}`);
+        }
+      }
+
+      const uniqueVideoRecords = [...new Map(videoRecords.map((record) => [
+        `${record.contentType}:${record.videoId}`,
+        record,
+      ])).values()];
+
       if (normalized.mode === 'detailed' && normalized.maxDetailedVideosPerChannel > 0) {
-        const detailLimit = Math.min(normalized.maxDetailedVideosPerChannel, videoRecords.length);
+        const detailLimit = Math.min(normalized.maxDetailedVideosPerChannel, uniqueVideoRecords.length);
         for (let index = 0; index < detailLimit; index += 1) {
-          const record = videoRecords[index];
+          const record = uniqueVideoRecords[index];
           try {
             const detailPage = await fetchYouTubePage(record.videoUrl, proxyConfiguration);
             let detail = extractVideoDetails(detailPage.initialData, detailPage.html);
             const hasExactPublishDate = /^\d{4}-\d{2}-\d{2}/.test(detail.publishedDate ?? '');
             if (!detail.category || detail.tags.length === 0 || !hasExactPublishDate) {
               try {
-                const videoId = new URL(record.videoUrl).searchParams.get('v');
+                const parsedVideoUrl = new URL(record.videoUrl);
+                const videoId = parsedVideoUrl.searchParams.get('v')
+                  ?? parsedVideoUrl.pathname.match(/^\/shorts\/([^/?#]+)/)?.[1]
+                  ?? null;
                 if (!videoId) throw new Error(`Video ID was not found in ${record.videoUrl}`);
                 const playerData = await fetchYouTubePlayerData(
                   videoId,
@@ -203,7 +253,7 @@ try {
               }
             }
             const durationSeconds = detail.durationSeconds ?? record.durationSeconds;
-            videoRecords[index] = {
+            uniqueVideoRecords[index] = {
               ...record,
               videoTitle: detail.title ?? record.videoTitle,
               viewCount: detail.viewCount ?? record.viewCount,
@@ -227,11 +277,70 @@ try {
         }
       }
 
-      if (videoRecords.length > 0) {
-        await Actor.pushData(videoRecords);
-        savedVideoCount += videoRecords.length;
+      if (uniqueVideoRecords.length > 0) {
+        await Actor.pushData(uniqueVideoRecords);
+        savedVideoCount += uniqueVideoRecords.length;
       }
-      log.info(`Saved ${metadata.title ?? canonicalChannelUrl} with ${videoRecords.length} video row(s).`);
+
+      let playlistRecords: PlaylistRecord[] = [];
+      if (normalized.includePlaylists) {
+        try {
+          const playlistsPage = await fetchYouTubePage(publicChannelLinks.playlistsUrl, proxyConfiguration);
+          playlistRecords = extractPlaylists(playlistsPage.initialData)
+            .slice(0, normalized.maxPlaylistsPerChannel)
+            .map((playlist): PlaylistRecord => ({
+              recordType: 'playlist',
+              channelUrl: canonicalChannelUrl,
+              channelName: metadata.title,
+              playlistId: playlist.playlistId,
+              playlistUrl: `https://www.youtube.com/playlist?list=${encodeURIComponent(playlist.playlistId)}`,
+              playlistTitle: playlist.title,
+              videoCount: playlist.videoCountText,
+              videoCountNumber: parseCompactCount(playlist.videoCountText),
+              thumbnailUrl: playlist.thumbnailUrl,
+              scrapedAt: new Date().toISOString(),
+            }));
+          if (playlistRecords.length > 0) await Actor.pushData(playlistRecords);
+        } catch (error) {
+          detailedRequestFailureCount += 1;
+          log.warning(`Playlists were unavailable for ${canonicalChannelUrl}: ${String(error)}`);
+        }
+      }
+
+      let communityRecords: CommunityPostRecord[] = [];
+      if (normalized.includeCommunityPosts) {
+        try {
+          const communityPage = await fetchYouTubePage(publicChannelLinks.communityUrl, proxyConfiguration);
+          communityRecords = extractCommunityPosts(communityPage.initialData)
+            .slice(0, normalized.maxCommunityPostsPerChannel)
+            .map((post): CommunityPostRecord => ({
+              recordType: 'community_post',
+              channelUrl: canonicalChannelUrl,
+              channelName: metadata.title,
+              postId: post.postId,
+              postUrl: `https://www.youtube.com/post/${encodeURIComponent(post.postId)}`,
+              postText: redactContactInfo(truncate(post.text, 5000)),
+              publishedDate: post.publishedText,
+              likeCount: post.likeCountText,
+              likeCountNumber: parseCompactCount(post.likeCountText),
+              commentCount: post.commentCountText,
+              commentCountNumber: parseCompactCount(post.commentCountText),
+              attachmentType: post.attachmentType,
+              attachmentUrl: post.attachmentUrl,
+              imageUrl: post.imageUrl,
+              scrapedAt: new Date().toISOString(),
+            }));
+          if (communityRecords.length > 0) await Actor.pushData(communityRecords);
+        } catch (error) {
+          detailedRequestFailureCount += 1;
+          log.warning(`Community posts were unavailable for ${canonicalChannelUrl}: ${String(error)}`);
+        }
+      }
+
+      log.info(
+        `Saved ${metadata.title ?? canonicalChannelUrl} with ${uniqueVideoRecords.length} video/Short/live row(s), `
+        + `${playlistRecords.length} playlist row(s), and ${communityRecords.length} community-post row(s).`,
+      );
 
       if (chargeResult.eventChargeLimitReached) spendingLimitReached = true;
     } catch (error) {
@@ -265,16 +374,21 @@ function buildVideoRecords(
   channelUrl: string,
   channelName: string | null,
   maximum: number,
-  includeShorts: boolean,
+  contentType: VideoRecord['contentType'],
 ): VideoRecord[] {
   return extractVideos(initialData)
     .map((video): VideoRecord => {
       const durationSeconds = parseDurationToSeconds(video.lengthText);
       const isShorts = detectShorts(video.navigationUrl, durationSeconds);
       return {
+        recordType: 'video',
+        contentType,
+        videoId: video.videoId,
         channelUrl,
         channelName,
-        videoUrl: `https://www.youtube.com/watch?v=${video.videoId}`,
+        videoUrl: contentType === 'short'
+          ? `https://www.youtube.com/shorts/${video.videoId}`
+          : `https://www.youtube.com/watch?v=${video.videoId}`,
         videoTitle: video.title,
         viewCount: video.viewText,
         viewCountNumber: parseCompactCount(video.viewText),
@@ -289,10 +403,11 @@ function buildVideoRecords(
         videoDescription: null,
         tags: [],
         category: null,
-        isShorts,
+        isShorts: contentType === 'short' || isShorts,
+        liveStatus: contentType === 'live_stream' ? video.liveStatus : null,
         scrapedAt: new Date().toISOString(),
       };
     })
-    .filter((video) => includeShorts || !video.isShorts)
+    .filter((video) => contentType === 'short' ? video.isShorts : !video.isShorts)
     .slice(0, maximum);
 }

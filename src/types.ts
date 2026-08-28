@@ -15,6 +15,13 @@ export interface ActorInput {
   maxVideosPerChannel?: number;
   maxDetailedVideosPerChannel?: number;
   includeShorts?: boolean;
+  maxShortsPerChannel?: number;
+  includeLiveStreams?: boolean;
+  maxLiveStreamsPerChannel?: number;
+  includePlaylists?: boolean;
+  maxPlaylistsPerChannel?: number;
+  includeCommunityPosts?: boolean;
+  maxCommunityPostsPerChannel?: number;
   proxyConfiguration?: ProxyConfig;
 }
 
@@ -51,6 +58,7 @@ export interface SocialProfiles {
 }
 
 export interface ChannelRecord {
+  recordType: 'channel';
   channelUrl: string;
   channelId: string | null;
   canonicalChannelUrl: string;
@@ -82,6 +90,9 @@ export interface ChannelRecord {
 }
 
 export interface VideoRecord {
+  recordType: 'video';
+  contentType: 'video' | 'short' | 'live_stream';
+  videoId: string;
   channelUrl: string;
   channelName: string | null;
   videoUrl: string;
@@ -100,5 +111,37 @@ export interface VideoRecord {
   tags: string[];
   category: string | null;
   isShorts: boolean;
+  liveStatus: 'live' | 'upcoming' | 'streamed' | null;
+  scrapedAt: string;
+}
+
+export interface PlaylistRecord {
+  recordType: 'playlist';
+  channelUrl: string;
+  channelName: string | null;
+  playlistId: string;
+  playlistUrl: string;
+  playlistTitle: string | null;
+  videoCount: string | null;
+  videoCountNumber: number | null;
+  thumbnailUrl: string | null;
+  scrapedAt: string;
+}
+
+export interface CommunityPostRecord {
+  recordType: 'community_post';
+  channelUrl: string;
+  channelName: string | null;
+  postId: string;
+  postUrl: string;
+  postText: string | null;
+  publishedDate: string | null;
+  likeCount: string | null;
+  likeCountNumber: number | null;
+  commentCount: string | null;
+  commentCountNumber: number | null;
+  attachmentType: 'image' | 'video' | 'playlist' | 'poll' | 'none';
+  attachmentUrl: string | null;
+  imageUrl: string | null;
   scrapedAt: string;
 }

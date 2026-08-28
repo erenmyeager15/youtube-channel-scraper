@@ -9,6 +9,10 @@ const {
   MAX_CHANNELS_PER_RUN,
   MAX_DETAILED_CHANNELS_PER_RUN,
   MAX_DETAILED_VIDEOS_PER_CHANNEL,
+  MAX_SHORTS_PER_CHANNEL,
+  MAX_LIVE_STREAMS_PER_CHANNEL,
+  MAX_PLAYLISTS_PER_CHANNEL,
+  MAX_COMMUNITY_POSTS_PER_CHANNEL,
   MAX_SEARCH_KEYWORDS,
   buildProxyConfigurationOptions,
   normalizeActorInput,
@@ -27,9 +31,11 @@ const {
   classifyExternalLink,
   extractChannelAbout,
   extractChannelMetadata,
+  extractCommunityPosts,
   extractInitialData,
   extractPlayerApiConfig,
   extractPlayerResponse,
+  extractPlaylists,
   extractSearchChannelUrls,
   extractVideoDetails,
   extractVideos,
@@ -39,18 +45,32 @@ const actor = readJson('.actor/actor.json');
 const schema = readJson('INPUT_SCHEMA.json');
 
 assert.equal(actor.pricingInfo?.pricingModel, 'PAY_PER_EVENT');
-assert.equal(actor.pricingInfo.pricingPerEvent.actorChargeEvents['channel-scraped'].eventPriceUsd, 0.003);
+assert.deepEqual(actor.pricingInfo.pricingPerEvent.actorChargeEvents['channel-scraped'].eventTieredPricingUsd, {
+  FREE: { tieredEventPriceUsd: 0.003 },
+  BRONZE: { tieredEventPriceUsd: 0.00285 },
+  SILVER: { tieredEventPriceUsd: 0.0027 },
+  GOLD: { tieredEventPriceUsd: 0.00255 },
+  PLATINUM: { tieredEventPriceUsd: 0.00255 },
+  DIAMOND: { tieredEventPriceUsd: 0.00255 },
+});
 assert.equal(actor.pricingInfo.pricingPerEvent.actorChargeEvents['channel-scraped'].isPrimaryEvent, true);
 assert.equal(actor.pricingInfo.pricingPerEvent.actorChargeEvents['apify-actor-start'].eventPriceUsd, 0.00005);
 assert.equal(actor.defaultRunOptions.memoryMbytes, 256);
 assert.equal(actor.minMemoryMbytes, 256);
 assert.equal(actor.maxMemoryMbytes, 1024);
 assert.equal(actor.defaultRunOptions.timeoutSecs, 900);
-assert.equal(JSON.parse(actor.exampleRunInput.body).mode, 'detailed');
+assert.equal(JSON.parse(actor.exampleRunInput.body).mode, 'fast');
+assert.equal(JSON.parse(actor.exampleRunInput.body).includeShorts, true);
+assert.equal(JSON.parse(actor.exampleRunInput.body).includePlaylists, true);
+assert.equal(JSON.parse(actor.exampleRunInput.body).includeCommunityPosts, true);
 assert.equal(schema.properties.channelUrls.maxItems, MAX_CHANNELS_PER_RUN);
 assert.equal(schema.properties.searchKeywords.maxItems, MAX_SEARCH_KEYWORDS);
 assert.deepEqual(schema.properties.mode.enum, ['fast', 'detailed']);
 assert.equal(schema.properties.maxDetailedVideosPerChannel.maximum, MAX_DETAILED_VIDEOS_PER_CHANNEL);
+assert.equal(schema.properties.maxShortsPerChannel.maximum, MAX_SHORTS_PER_CHANNEL);
+assert.equal(schema.properties.maxLiveStreamsPerChannel.maximum, MAX_LIVE_STREAMS_PER_CHANNEL);
+assert.equal(schema.properties.maxPlaylistsPerChannel.maximum, MAX_PLAYLISTS_PER_CHANNEL);
+assert.equal(schema.properties.maxCommunityPostsPerChannel.maximum, MAX_COMMUNITY_POSTS_PER_CHANNEL);
 
 assert.equal(normalizeYouTubeChannelUrl('@mkbhd'), 'https://www.youtube.com/@mkbhd');
 assert.equal(
@@ -76,6 +96,11 @@ assert.deepEqual(normalized.channelUrls, ['https://www.youtube.com/@mkbhd']);
 assert.deepEqual(normalized.searchKeywords, ['technology']);
 assert.equal(normalized.mode, 'fast');
 assert.equal(normalized.maxDetailedVideosPerChannel, 1);
+assert.equal(normalized.includeShorts, false);
+assert.equal(normalized.maxShortsPerChannel, 10);
+assert.equal(normalized.includeLiveStreams, false);
+assert.equal(normalized.includePlaylists, false);
+assert.equal(normalized.includeCommunityPosts, false);
 assert.equal(normalized.maxRequestsPerCrawl, MAX_CHANNELS_PER_RUN + 1);
 assert.equal(normalized.proxyOptions, undefined);
 const detailed = normalizeActorInput({
@@ -99,6 +124,14 @@ assert.throws(
 assert.throws(
   () => normalizeActorInput({ channelUrls: ['@mkbhd'], includeShorts: 'false' }),
   /includeShorts must be a boolean/i,
+);
+assert.throws(
+  () => normalizeActorInput({ channelUrls: ['@mkbhd'], includePlaylists: 'yes' }),
+  /includePlaylists must be a boolean/i,
+);
+assert.throws(
+  () => normalizeActorInput({ channelUrls: ['@mkbhd'], maxCommunityPostsPerChannel: 51 }),
+  /maxCommunityPostsPerChannel/i,
 );
 assert.throws(
   () => normalizeActorInput({ channelUrls: Array.from({ length: MAX_CHANNELS_PER_RUN + 1 }, (_, index) => `@test${index}`) }),
@@ -163,7 +196,7 @@ assert.deepEqual(
     shortsUrl: 'https://www.youtube.com/channel/UC_FIXTURE/shorts',
     liveStreamsUrl: 'https://www.youtube.com/channel/UC_FIXTURE/streams',
     playlistsUrl: 'https://www.youtube.com/channel/UC_FIXTURE/playlists',
-    communityUrl: 'https://www.youtube.com/channel/UC_FIXTURE/community',
+    communityUrl: 'https://www.youtube.com/channel/UC_FIXTURE/posts',
   },
 );
 assert.equal(
@@ -266,6 +299,44 @@ const parserFixture = {
         navigationEndpoint: { commandMetadata: { webCommandMetadata: { url: '/@search-result' } } },
       },
     },
+    {
+      reelItemRenderer: {
+        videoId: 'short123',
+        headline: { simpleText: 'Fixture Short' },
+        viewCountText: { simpleText: '1.2K views' },
+        navigationEndpoint: { commandMetadata: { webCommandMetadata: { url: '/shorts/short123' } } },
+      },
+    },
+    {
+      gridVideoRenderer: {
+        videoId: 'live123',
+        title: { simpleText: 'Fixture Live' },
+        viewCountText: { simpleText: '500 watching' },
+        badges: [{ metadataBadgeRenderer: { style: 'BADGE_STYLE_TYPE_LIVE_NOW', label: 'LIVE' } }],
+      },
+    },
+    {
+      gridPlaylistRenderer: {
+        playlistId: 'PL_FIXTURE',
+        title: { runs: [{ text: 'Fixture playlist' }] },
+        videoCountText: { runs: [{ text: '12 videos' }] },
+        thumbnail: { thumbnails: [{ url: 'https://i.ytimg.com/playlist.jpg' }] },
+      },
+    },
+    {
+      backstagePostRenderer: {
+        postId: 'UgkxFixture',
+        contentText: { runs: [{ text: 'New video this week' }] },
+        publishedTimeText: { runs: [{ text: '2 days ago' }] },
+        voteCount: { simpleText: '1.5K' },
+        replyCount: { simpleText: '42' },
+        backstageAttachment: {
+          backstageImageRenderer: {
+            image: { thumbnails: [{ url: 'https://yt3.ggpht.com/community.jpg' }] },
+          },
+        },
+      },
+    },
   ],
 };
 const parsedFixture = extractInitialData(`<script>var ytInitialData = ${JSON.stringify(parserFixture)};</script>`);
@@ -293,6 +364,15 @@ assert.equal(parsedAbout?.externalLinks[0]?.title, 'Official website');
 assert.equal(parsedAbout?.externalLinks[4]?.title, null);
 assert.doesNotMatch(JSON.stringify(parsedAbout), /person@example\.com/i);
 assert.equal(extractVideos(parsedFixture)[0].videoId, 'video123');
+assert.equal(extractVideos(parsedFixture).find((item) => item.videoId === 'short123')?.navigationUrl, '/shorts/short123');
+assert.equal(extractVideos(parsedFixture).find((item) => item.videoId === 'live123')?.liveStatus, 'live');
+assert.equal(extractPlaylists(parsedFixture)[0]?.playlistId, 'PL_FIXTURE');
+assert.equal(extractPlaylists(parsedFixture)[0]?.videoCountText, '12 videos');
+const communityPosts = extractCommunityPosts(parsedFixture);
+assert.equal(communityPosts[0]?.postId, 'UgkxFixture');
+assert.equal(communityPosts[0]?.text, 'New video this week');
+assert.equal(communityPosts[0]?.attachmentType, 'image');
+assert.equal(communityPosts[0]?.imageUrl, 'https://yt3.ggpht.com/community.jpg');
 assert.deepEqual(extractSearchChannelUrls(parsedFixture, 1), ['https://www.youtube.com/@search-result']);
 
 const videoInitialFixture = {

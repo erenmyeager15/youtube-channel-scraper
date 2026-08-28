@@ -1,15 +1,15 @@
 {
   "actorSpecification": 1,
   "name": "youtube-channel-scraper",
-  "title": "YouTube Channel Scraper: Stats, Videos & Engagement",
-  "description": "Scrape public YouTube channels and latest videos in fast or detailed mode. Get channel-tab links, websites, classified social/community profiles, subscribers, total views, country, video engagement, tags, and category—without collecting emails.",
+  "title": "YouTube Scraper: Channels, Shorts, Live & Posts",
+  "description": "Scrape public YouTube channels, videos, Shorts, live streams, playlists, and channel-authored community posts. Add About data, public websites, social profiles, and engagement—without emails or commenter identities.",
   "version": "1.0",
   "buildTag": "latest",
   "dockerfile": "Dockerfile",
   "input": "../INPUT_SCHEMA.json",
   "readme": "../README.md",
   "exampleRunInput": {
-    "body": "{\"channelUrls\":[\"https://www.youtube.com/@mkbhd\"],\"searchKeywords\":[],\"mode\":\"detailed\",\"maxChannels\":1,\"maxVideosPerChannel\":3,\"maxDetailedVideosPerChannel\":1,\"includeShorts\":false,\"proxyConfiguration\":{\"useApifyProxy\":false}}",
+    "body": "{\"channelUrls\":[\"https://www.youtube.com/@mkbhd\"],\"searchKeywords\":[],\"mode\":\"fast\",\"maxChannels\":1,\"maxVideosPerChannel\":1,\"maxDetailedVideosPerChannel\":0,\"includeShorts\":true,\"maxShortsPerChannel\":2,\"includeLiveStreams\":false,\"includePlaylists\":true,\"maxPlaylistsPerChannel\":2,\"includeCommunityPosts\":true,\"maxCommunityPostsPerChannel\":2,\"proxyConfiguration\":{\"useApifyProxy\":false}}",
     "contentType": "application/json; charset=utf-8"
   },
   "pricingInfo": {
@@ -25,8 +25,15 @@
         },
         "channel-scraped": {
           "eventTitle": "Channel scraped",
-          "eventDescription": "Charged once per saved channel, including its available fast or detailed latest-video rows.",
-          "eventPriceUsd": 0.003,
+          "eventDescription": "Charged once per saved channel, including all selected videos, Shorts, live streams, playlists, and channel-authored community posts.",
+          "eventTieredPricingUsd": {
+            "FREE": { "tieredEventPriceUsd": 0.003 },
+            "BRONZE": { "tieredEventPriceUsd": 0.00285 },
+            "SILVER": { "tieredEventPriceUsd": 0.0027 },
+            "GOLD": { "tieredEventPriceUsd": 0.00255 },
+            "PLATINUM": { "tieredEventPriceUsd": 0.00255 },
+            "DIAMOND": { "tieredEventPriceUsd": 0.00255 }
+          },
           "isPrimaryEvent": true,
           "isOneTimeEvent": false
         }

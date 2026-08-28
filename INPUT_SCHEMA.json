@@ -65,11 +65,70 @@
       "editor": "number"
     },
     "includeShorts": {
-      "title": "Include Shorts",
-      "description": "Include videos detected as YouTube Shorts. Detection prefers YouTube's /shorts/ route and uses duration only as a fallback.",
+      "title": "Collect Shorts",
+      "description": "Fetch the channel's public Shorts tab and save actual Short rows with titles, views, dates, durations, thumbnails, and URLs.",
+      "type": "boolean",
+      "default": false,
+      "editor": "checkbox",
+      "sectionCaption": "Optional Channel Sections",
+      "sectionDescription": "Collect additional public channel sections only when you need them. Each enabled section adds one bounded HTTP request per channel."
+    },
+    "maxShortsPerChannel": {
+      "title": "Max Shorts Per Channel",
+      "description": "Maximum Short rows saved from each channel's currently loaded public Shorts tab.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 10,
+      "editor": "number"
+    },
+    "includeLiveStreams": {
+      "title": "Collect Live Streams",
+      "description": "Fetch the public Live tab and save live, upcoming, and previously streamed video rows when exposed.",
       "type": "boolean",
       "default": false,
       "editor": "checkbox"
+    },
+    "maxLiveStreamsPerChannel": {
+      "title": "Max Live Streams Per Channel",
+      "description": "Maximum live-stream rows saved from each channel's currently loaded public Live tab.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 10,
+      "editor": "number"
+    },
+    "includePlaylists": {
+      "title": "Collect Playlists",
+      "description": "Fetch the public Playlists tab and save playlist titles, IDs, URLs, video counts, and thumbnails.",
+      "type": "boolean",
+      "default": false,
+      "editor": "checkbox"
+    },
+    "maxPlaylistsPerChannel": {
+      "title": "Max Playlists Per Channel",
+      "description": "Maximum playlist rows saved from each channel's currently loaded public Playlists tab.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 10,
+      "editor": "number"
+    },
+    "includeCommunityPosts": {
+      "title": "Collect Community Posts",
+      "description": "Fetch the public Community tab and save channel-authored post text, publish time, public engagement counts, and attachment links. Commenter identities are never collected.",
+      "type": "boolean",
+      "default": false,
+      "editor": "checkbox"
+    },
+    "maxCommunityPostsPerChannel": {
+      "title": "Max Community Posts Per Channel",
+      "description": "Maximum channel-authored community-post rows saved from each channel's currently loaded public Community tab.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 10,
+      "editor": "number"
     },
     "proxyConfiguration": {
       "title": "Proxy Configuration",
