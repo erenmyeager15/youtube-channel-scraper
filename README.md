@@ -1,37 +1,36 @@
 # YouTube Scraper: Channels, Shorts, Live & Posts
 
-Scrape public YouTube channels, videos, Shorts, live streams, playlists, and channel-authored community posts without a YouTube login or API key. Provide channel URLs, `@handles`, or search keywords, select only the content you need, and choose fast monitoring or richer detailed enrichment.
+Track competitor and creator channels from one dataset. Scrape public channel stats, recent videos, Shorts, live streams, playlists, channel-authored community posts, websites, and social profiles without a YouTube login or API key.
 
 The Actor uses bounded HTTP requests to read public YouTube pages and parses YouTube's embedded public data. It returns only fields YouTube exposes publicly and marks unavailable fields as `null`.
 
-## Quick start
+**Price:** $3 per 1,000 successfully saved channels on the FREE Store tier, with discounts down to $2.55 per 1,000. One channel charge includes all selected content rows—there is no separate charge for each video, Short, playlist, or post. A one-channel run is approximately $0.00305 including the minimum start event.
 
-Run one channel with a small mix of public content:
+**Best for:** competitor publishing trackers, creator research tables, channel watchlists, and recurring reports. The Actor reads the initially loaded public content grids; it is not a full historical export of every upload.
+
+## Track a competitor channel
+
+This low-cost first run creates one channel row plus up to five recent videos, five Shorts, and three community posts:
 
 ```json
 {
   "channelUrls": [
     "https://www.youtube.com/@mkbhd"
   ],
-  "searchKeywords": [],
   "mode": "fast",
-  "maxChannels": 1,
-  "maxVideosPerChannel": 1,
-  "maxDetailedVideosPerChannel": 1,
+  "maxVideosPerChannel": 5,
   "includeShorts": true,
-  "maxShortsPerChannel": 2,
-  "includeLiveStreams": false,
-  "includePlaylists": true,
-  "maxPlaylistsPerChannel": 2,
+  "maxShortsPerChannel": 5,
   "includeCommunityPosts": true,
-  "maxCommunityPostsPerChannel": 2,
-  "proxyConfiguration": {
-    "useApifyProxy": false
-  }
+  "maxCommunityPostsPerChannel": 3
 }
 ```
 
-For richer creator research, switch to detailed mode:
+Schedule the same input daily or weekly, then compare `subscriberCountNumber`, `totalVideoCountNumber`, recent titles, views, and publishing dates in your spreadsheet or dashboard. Add more direct channel URLs to build a watchlist.
+
+## Enrich a creator profile
+
+Switch to detailed mode when you also need public websites, classified social profiles, About-page details, and exact engagement fields for selected recent videos:
 
 ```json
 {

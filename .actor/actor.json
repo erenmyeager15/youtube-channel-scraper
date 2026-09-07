@@ -2,14 +2,14 @@
   "actorSpecification": 1,
   "name": "youtube-channel-scraper",
   "title": "YouTube Scraper: Channels, Shorts, Live & Posts",
-  "description": "Scrape public YouTube channels, videos, Shorts, live streams, playlists, and channel-authored community posts. Add About data, public websites, social profiles, and engagement—without emails or commenter identities.",
+  "description": "Track competitor and creator channels with public stats, recent videos, Shorts, live streams, playlists, posts, websites, social profiles, and engagement. Selected content rows are included in each channel charge.",
   "version": "1.0",
   "buildTag": "latest",
   "dockerfile": "Dockerfile",
   "input": "../INPUT_SCHEMA.json",
   "readme": "../README.md",
   "exampleRunInput": {
-    "body": "{\"channelUrls\":[\"https://www.youtube.com/@mkbhd\"],\"searchKeywords\":[],\"mode\":\"fast\",\"maxChannels\":1,\"maxVideosPerChannel\":1,\"maxDetailedVideosPerChannel\":0,\"includeShorts\":true,\"maxShortsPerChannel\":2,\"includeLiveStreams\":false,\"includePlaylists\":true,\"maxPlaylistsPerChannel\":2,\"includeCommunityPosts\":true,\"maxCommunityPostsPerChannel\":2,\"proxyConfiguration\":{\"useApifyProxy\":false}}",
+    "body": "{\"channelUrls\":[\"https://www.youtube.com/@mkbhd\"],\"searchKeywords\":[],\"mode\":\"fast\",\"maxChannels\":1,\"maxVideosPerChannel\":5,\"maxDetailedVideosPerChannel\":0,\"includeShorts\":true,\"maxShortsPerChannel\":5,\"includeLiveStreams\":false,\"includePlaylists\":false,\"includeCommunityPosts\":true,\"maxCommunityPostsPerChannel\":3,\"proxyConfiguration\":{\"useApifyProxy\":false}}",
     "contentType": "application/json; charset=utf-8"
   },
   "pricingInfo": {
