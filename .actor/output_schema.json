@@ -4,6 +4,12 @@
   "description": "Structured public YouTube channel, video, Short, live-stream, playlist, and channel-authored community-post records. Email addresses and commenter identities are not collected.",
   "type": "object",
   "properties": {
+    "coverage": {
+      "type": "string",
+      "title": "Run coverage and limits",
+      "description": "Per-requested-section page, row, date-uncertainty and stop-reason report. Separate from charged channel rows; not a full-archive guarantee.",
+      "template": "{{links.apiDefaultKeyValueStoreUrl}}/records/RUN-SUMMARY"
+    },
     "results": {
       "type": "string",
       "title": "YouTube channel and content records",

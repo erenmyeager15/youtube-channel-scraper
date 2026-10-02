@@ -57,11 +57,43 @@
     },
     "maxVideosPerChannel": {
       "title": "Max Videos Per Channel",
-      "description": "Maximum latest public video rows to save per channel from YouTube's currently loaded public Videos grid. Fewer may be available.",
+      "description": "Maximum public video rows to save per channel from the inspected Videos pages. maxPagesPerSection and maxRequestsPerChannel bound collection; fewer rows may be available.",
       "type": "integer",
       "minimum": 1,
       "maximum": 100,
       "default": 1,
+      "editor": "number"
+    },
+    "publishedAfter": {
+      "title": "Published On or After",
+      "description": "Optional inclusive lower publication boundary for videos, Shorts, live streams and community posts. Use an ISO date such as 2026-10-01 or a timestamp with a timezone such as 2026-10-01T12:00:00Z. A date alone starts at 00:00:00 UTC. Unknown dates and relative ages that overlap a boundary remain in output with uncertainty.",
+      "type": "string",
+      "editor": "textfield",
+      "sectionCaption": "Publication Window and Collection Limits",
+      "sectionDescription": "Inspect a bounded number of public pages. Publication filters retain rows whose available dates cannot establish that they are outside the requested window."
+    },
+    "publishedBefore": {
+      "title": "Published On or Before",
+      "description": "Optional inclusive upper publication boundary for videos, Shorts, live streams and community posts. Use an ISO date or a timestamp with a timezone. A date alone includes that entire UTC day, through 23:59:59.999. Must be on or after publishedAfter. Unknown dates and relative ages that overlap a boundary remain in output with uncertainty.",
+      "type": "string",
+      "editor": "textfield"
+    },
+    "maxPagesPerSection": {
+      "title": "Max Pages Per Content Tab",
+      "description": "Maximum public pages to inspect per selected content tab, including its first loaded page. Additional pages use bounded continuation requests when available. The default inspects one page per selected tab; fewer rows may be available.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "default": 1,
+      "editor": "number"
+    },
+    "maxRequestsPerChannel": {
+      "title": "Max HTTP Attempts Per Channel",
+      "description": "Maximum HTTP attempts per channel, including its initial page, content tabs, About, video detail/player requests, continuations and retries. Exhausting this budget stops further requests and reports partial coverage.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 30,
       "editor": "number"
     },
     "includeShorts": {
@@ -71,11 +103,11 @@
       "default": false,
       "editor": "checkbox",
       "sectionCaption": "Optional Channel Sections",
-      "sectionDescription": "Collect additional public channel sections only when you need them. Each enabled section adds one bounded HTTP request per channel."
+      "sectionDescription": "Collect additional public channel sections when needed. Each enabled section shares the per-channel HTTP attempt budget and may inspect up to maxPagesPerSection public pages."
     },
     "maxShortsPerChannel": {
       "title": "Max Shorts Per Channel",
-      "description": "Maximum Short rows saved from each channel's currently loaded public Shorts tab.",
+      "description": "Maximum Short rows saved from each channel's inspected public Shorts pages, subject to the page and HTTP attempt limits.",
       "type": "integer",
       "minimum": 1,
       "maximum": 50,
@@ -91,7 +123,7 @@
     },
     "maxLiveStreamsPerChannel": {
       "title": "Max Live Streams Per Channel",
-      "description": "Maximum live-stream rows saved from each channel's currently loaded public Live tab.",
+      "description": "Maximum live-stream rows saved from each channel's inspected public Live pages, subject to the page and HTTP attempt limits.",
       "type": "integer",
       "minimum": 1,
       "maximum": 50,
@@ -107,7 +139,7 @@
     },
     "maxPlaylistsPerChannel": {
       "title": "Max Playlists Per Channel",
-      "description": "Maximum playlist rows saved from each channel's currently loaded public Playlists tab.",
+      "description": "Maximum playlist rows saved from each channel's inspected public Playlists pages, subject to the page and HTTP attempt limits.",
       "type": "integer",
       "minimum": 1,
       "maximum": 50,
@@ -123,23 +155,29 @@
     },
     "maxCommunityPostsPerChannel": {
       "title": "Max Community Posts Per Channel",
-      "description": "Maximum channel-authored community-post rows saved from each channel's currently loaded public Community tab.",
+      "description": "Maximum channel-authored community-post rows saved from each channel's inspected public Community pages, subject to the page and HTTP attempt limits.",
       "type": "integer",
       "minimum": 1,
       "maximum": 50,
       "default": 10,
       "editor": "number"
     },
+    "metadataProxyFallback": {
+      "title": "Metadata-only Residential fallback (optional)",
+      "description": "Opt in to compact Residential player-metadata requests only after a confirmed direct automation check. Main pages stay direct. At most one proxy attempt per selected detailed video, five per channel, stopping after a fallback failure. Adds proxy costs, requires Residential access, and does not guarantee fields. Do not combine with Proxy Configuration. Disabled by default.",
+      "type": "boolean",
+      "default": false
+    },
     "proxyConfiguration": {
       "title": "Proxy Configuration",
-      "description": "Optional proxy settings for HTTP requests. Direct mode is the low-cost default; enable Apify Proxy or provide custom proxy URLs if direct requests are rate-limited.",
+      "description": "Optional full-page proxy settings for HTTP requests. Direct mode is the low-cost default, but YouTube may restrict detailed metadata in cloud runs. Proxies are opt-in, add costs and do not guarantee access. Use metadataProxyFallback instead to proxy only compact metadata after a confirmed direct challenge; do not enable both.",
       "type": "object",
       "editor": "proxy",
       "default": {
         "useApifyProxy": false
       },
       "sectionCaption": "Proxy Settings",
-      "sectionDescription": "Direct mode is usually sufficient. Enable a proxy only when needed."
+      "sectionDescription": "Proxy use is optional and can add costs. Public detail requests may still be restricted."
     }
   }
 }

@@ -1,5 +1,9 @@
 import type { ProxyConfiguration } from 'apify';
-import { gotScraping } from 'crawlee';
+import { fetchBoundedHttp, transportLimitReason } from './bounded-http.js';
+import { RequestBudget } from './request-budget.js';
+import { isPlaylistLockup } from './playlist-identity.js';
+import { detailFailure, detailFailureCategory, detailFailureDiagnostics } from './detail-failure.js';
+import { resolveYouTubeProxyUrl } from './youtube-session.js';
 
 import { classifyYouTubeDocument } from './youtube-utils.js';
 import type { ChannelExternalLink, ExternalLinkPlatform, SocialProfiles } from './types.js';
@@ -62,6 +66,8 @@ export interface CommunityPostMetadata {
 export interface YouTubePlayerApiConfig {
   apiKey: string;
   clientVersion: string;
+  /** Anonymous public-page context only; never account/auth/session fields. */
+  clientContext?: { visitorData?: string; userAgent?: string; hl?: string; gl?: string };
 }
 
 const REQUEST_HEADERS = {
@@ -70,27 +76,62 @@ const REQUEST_HEADERS = {
   cookie: 'SOCS=CAI',
 };
 
+// A confirmed automation challenge applies to this anonymous channel session only.
+// Do not retain response text/tokens or carry a block into unrelated channel budgets.
+const playerAutomationBlocked = new WeakMap<RequestBudget, Set<ProxyConfiguration | undefined>>();
+
+function blockedPlayerRoutes(budget: RequestBudget): Set<ProxyConfiguration | undefined> {
+  let routes = playerAutomationBlocked.get(budget);
+  if (!routes) { routes = new Set(); playerAutomationBlocked.set(budget, routes); }
+  return routes;
+}
+
+export interface PlayerRequestOptions {
+  /** Explicit proxy-only metadata request after a direct route challenge. No page/media fetch. */
+  metadataOnlyProxy?: boolean;
+  maximumResponseBytes?: number;
+}
+
+function isPlayerAutomationChallenge(data: JsonObject): boolean {
+  return data.playabilityStatus?.status === 'LOGIN_REQUIRED'
+    && typeof data.playabilityStatus.reason === 'string'
+    && /(?:not a bot|automated queries|unusual traffic)/i.test(data.playabilityStatus.reason);
+}
+
+function hasVerifiedWatchAutomationChallenge(html: string, expectedVideoId: string): boolean {
+  let currentId: unknown;
+  try { currentId = extractInitialData(html).currentVideoEndpoint?.watchEndpoint?.videoId; }
+  catch { /* A matching public canonical URL can still bind a watch page. */ }
+  const canonical = extractMetaContent(html, 'property', 'og:url');
+  const canonicalId = canonical ? publicVideoId(canonical) : null;
+  if ((typeof currentId === 'string' && currentId !== expectedVideoId)
+    || (canonicalId && canonicalId !== expectedVideoId)
+    || (currentId !== expectedVideoId && canonicalId !== expectedVideoId)) return false;
+  try {
+    const player = extractPlayerResponse(html, expectedVideoId);
+    return !player.videoDetails && !player.microformat?.playerMicroformatRenderer
+      && isPlayerAutomationChallenge(player);
+  } catch { return false; }
+}
+
 export async function fetchYouTubePage(
   url: string,
   proxyConfiguration?: ProxyConfiguration,
   maximumAttempts = 4,
+  budget = new RequestBudget(30),
+  transport: typeof fetchBoundedHttp = fetchBoundedHttp,
 ): Promise<YouTubePage> {
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
     try {
-      const proxyUrl = proxyConfiguration
-        ? await proxyConfiguration.newUrl(`youtube-http-${attempt}-${Date.now()}`)
-        : undefined;
-      const response = await gotScraping({
+      budget.check();
+      const proxyUrl = await resolveYouTubeProxyUrl(proxyConfiguration, budget);
+      const response = await transport({
         url,
         proxyUrl,
         headers: REQUEST_HEADERS,
-        timeout: { request: 30_000 },
-        retry: { limit: 0 },
-        throwHttpErrors: false,
-        followRedirect: true,
-      });
+      }, budget);
 
       const html = String(response.body);
       const title = readHtmlTitle(html);
@@ -106,6 +147,7 @@ export async function fetchYouTubePage(
         finalUrl: response.url,
       };
     } catch (error) {
+      if (transportLimitReason(error)) throw error;
       lastError = error instanceof Error ? error : new Error(String(error));
       if (attempt < maximumAttempts) {
         await new Promise((resolve) => setTimeout(resolve, attempt * 400));
@@ -121,26 +163,43 @@ export async function fetchYouTubePlayerData(
   sourceHtml: string,
   proxyConfiguration?: ProxyConfiguration,
   maximumAttempts = 3,
+  budget = new RequestBudget(30),
+  transport: typeof fetchBoundedHttp = fetchBoundedHttp,
+  requestOptions: PlayerRequestOptions = {},
 ): Promise<JsonObject> {
+  budget.check();
+  if (requestOptions.metadataOnlyProxy && !proxyConfiguration) throw new Error('Explicit metadata proxy is required.');
+  const blockedRoutes = blockedPlayerRoutes(budget);
+  if (!requestOptions.metadataOnlyProxy && hasVerifiedWatchAutomationChallenge(sourceHtml, videoId)) blockedRoutes.add(proxyConfiguration);
+  if (blockedRoutes.has(proxyConfiguration)) {
+    throw detailFailure('YouTube requires an automation check for this anonymous session.',
+      'source-automation-check', 'LOGIN_REQUIRED');
+  }
   const config = extractPlayerApiConfig(sourceHtml);
-  if (!config) throw new Error('YouTube public player API configuration was not found');
+  if (!config) throw detailFailure('YouTube public player API configuration was not found', 'player-config-missing');
 
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
     try {
-      const proxyUrl = proxyConfiguration
-        ? await proxyConfiguration.newUrl(`youtube-player-${attempt}-${Date.now()}`)
-        : undefined;
-      const response = await gotScraping({
-        url: `https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(config.apiKey)}`,
+      budget.check();
+      const proxyUrl = await resolveYouTubeProxyUrl(proxyConfiguration, budget);
+      const response = await transport({
+        url: `https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(config.apiKey)}`
+          + (requestOptions.metadataOnlyProxy ? '&fields=videoDetails%2Cmicroformat%2CplayabilityStatus' : ''),
         method: 'POST',
         proxyUrl,
+        ...(requestOptions.metadataOnlyProxy ? {
+          maximumResponseBytes: Math.min(requestOptions.maximumResponseBytes ?? 32_768, 32_768),
+          maximumRedirects: 0,
+        } : {}),
         headers: {
           ...REQUEST_HEADERS,
           'content-type': 'application/json',
           origin: 'https://www.youtube.com',
           'x-youtube-client-name': '1',
           'x-youtube-client-version': config.clientVersion,
+          ...(config.clientContext?.visitorData ? { 'x-goog-visitor-id': config.clientContext.visitorData } : {}),
+          ...(config.clientContext?.userAgent ? { 'user-agent': config.clientContext.userAgent } : {}),
         },
         body: JSON.stringify({
           context: {
@@ -149,41 +208,125 @@ export async function fetchYouTubePlayerData(
               clientVersion: config.clientVersion,
               hl: 'en',
               gl: 'US',
+              ...config.clientContext,
             },
           },
           videoId,
           contentCheckOk: true,
           racyCheckOk: true,
         }),
-        timeout: { request: 30_000 },
-        retry: { limit: 0 },
-        throwHttpErrors: false,
-      });
+      }, budget);
 
-      if (response.statusCode >= 400) throw new Error(`YouTube player API returned HTTP ${response.statusCode}`);
-      const data = JSON.parse(String(response.body)) as JsonObject;
+      if (response.statusCode >= 400) {
+        throw detailFailure(`YouTube player API returned HTTP ${response.statusCode}`, 'source-http-status');
+      }
+      let data: JsonObject;
+      try { data = JSON.parse(String(response.body)) as JsonObject; }
+      catch { throw detailFailure('YouTube player API returned invalid JSON', 'invalid-source-json'); }
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw detailFailure('YouTube player API returned no JSON object', 'invalid-source-json');
+      }
       if (!data.videoDetails && !data.microformat?.playerMicroformatRenderer) {
-        throw new Error('YouTube player API returned no public video metadata');
+        if (isPlayerAutomationChallenge(data)) {
+          blockedRoutes.add(proxyConfiguration);
+          throw detailFailure('YouTube requires an automation check for this anonymous session.',
+            'source-automation-check', 'LOGIN_REQUIRED');
+        }
+        throw detailFailure('YouTube player API returned no public video metadata', 'player-metadata-missing',
+          data.playabilityStatus?.status);
+      }
+      if (requestOptions.metadataOnlyProxy && Object.keys(data)
+        .some(key => !['videoDetails', 'microformat', 'playabilityStatus'].includes(key))) {
+        throw detailFailure('YouTube did not honor the metadata-only response request.', 'invalid-source-json');
       }
       return data;
     } catch (error) {
+      if (transportLimitReason(error)) throw error;
       lastError = error instanceof Error ? error : new Error(String(error));
+      const status = detailFailureDiagnostics(error).playerStatus;
+      if (status === 'LOGIN_REQUIRED' || status === 'AGE_CHECK_REQUIRED' || status === 'CONTENT_CHECK_REQUIRED') break;
       if (attempt < maximumAttempts) {
         await new Promise((resolve) => setTimeout(resolve, attempt * 400));
       }
     }
   }
 
-  throw new Error(
-    `YouTube player metadata request failed after ${maximumAttempts} attempts: `
-    + `${lastError?.message || lastError?.name || 'unknown error'}`,
+  throw detailFailure(
+    'YouTube player metadata request failed.',
+    detailFailureCategory(lastError),
+    detailFailureDiagnostics(lastError).playerStatus,
   );
 }
 
 export function extractPlayerApiConfig(html: string): YouTubePlayerApiConfig | null {
   const apiKey = extractJsonStringSetting(html, 'INNERTUBE_API_KEY');
   const clientVersion = extractJsonStringSetting(html, 'INNERTUBE_CLIENT_VERSION');
-  return apiKey && clientVersion ? { apiKey, clientVersion } : null;
+  if (!apiKey || !/^[A-Za-z0-9_-]{1,256}$/.test(apiKey)
+    || !clientVersion || !/^[A-Za-z0-9._-]{1,128}$/.test(clientVersion)) return null;
+  const publicContext = extractJsonObjectSetting(html, 'INNERTUBE_CONTEXT')?.client;
+  const client = publicContext?.clientName === 'WEB' ? publicContext : {};
+  const clientContext: NonNullable<YouTubePlayerApiConfig['clientContext']> = {};
+  const visitorData = extractJsonStringSetting(html, 'VISITOR_DATA') ?? client.visitorData;
+  if (typeof visitorData === 'string' && /^[A-Za-z0-9_./+=%-]{1,4096}$/.test(visitorData)) {
+    clientContext.visitorData = visitorData;
+  }
+  if (typeof client.userAgent === 'string' && /^[\x20-\x7e]{1,512}$/.test(client.userAgent)) {
+    clientContext.userAgent = client.userAgent;
+  }
+  if (typeof client.hl === 'string' && /^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$/i.test(client.hl)) {
+    clientContext.hl = client.hl;
+  }
+  if (typeof client.gl === 'string' && /^[a-z]{2}$/i.test(client.gl)) clientContext.gl = client.gl.toUpperCase();
+  return { apiKey, clientVersion, ...(Object.keys(clientContext).length ? { clientContext } : {}) };
+}
+
+/** Public browse continuations only; configuration comes from the selected tab's HTML. */
+export async function fetchYouTubeContinuation(
+  token: string,
+  sourceHtml: string,
+  proxyConfiguration?: ProxyConfiguration,
+  budget = new RequestBudget(30),
+  transport: typeof fetchBoundedHttp = fetchBoundedHttp,
+): Promise<JsonObject> {
+  if (!token || token.length > 16_384 || /[\u0000-\u001f]/.test(token)) {
+    throw new Error('Invalid public continuation token.');
+  }
+  const config = extractPlayerApiConfig(sourceHtml);
+  if (!config) throw new Error('Public browse configuration was unavailable.');
+  // Keep retries explicit so every source request and redirect consumes the shared budget.
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      budget.check();
+      const proxyUrl = await resolveYouTubeProxyUrl(proxyConfiguration, budget);
+      const response = await transport({
+        url: `https://www.youtube.com/youtubei/v1/browse?key=${encodeURIComponent(config.apiKey)}`,
+        method: 'POST',
+        proxyUrl,
+        headers: {
+          ...REQUEST_HEADERS,
+          'content-type': 'application/json',
+          origin: 'https://www.youtube.com',
+          'x-youtube-client-name': '1',
+          'x-youtube-client-version': config.clientVersion,
+          ...(config.clientContext?.visitorData ? { 'x-goog-visitor-id': config.clientContext.visitorData } : {}),
+          ...(config.clientContext?.userAgent ? { 'user-agent': config.clientContext.userAgent } : {}),
+        },
+        body: JSON.stringify({
+          context: { client: { clientName: 'WEB', clientVersion: config.clientVersion, hl: 'en', gl: 'US', ...config.clientContext } },
+          continuation: token,
+        }),
+      }, budget);
+      if (response.statusCode >= 400) throw new Error('Public browse HTTP error.');
+      const data = JSON.parse(response.body);
+      if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid browse response.');
+      return data;
+    } catch (error) {
+      if (transportLimitReason(error)) throw error;
+      if (attempt === 2) throw new Error('YouTube public continuation failed.');
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+  }
+  throw new Error('YouTube public continuation failed.');
 }
 
 export function extractInitialData(html: string): JsonObject {
@@ -300,7 +443,7 @@ export function extractChannelAbout(initialData: JsonObject): ChannelAboutMetada
   };
 }
 
-export function extractPlayerResponse(html: string): JsonObject {
+export function extractPlayerResponse(html: string, expectedVideoId?: string): JsonObject {
   const markers = [
     'var ytInitialPlayerResponse =',
     'var ytInitialPlayerResponse=',
@@ -312,6 +455,8 @@ export function extractPlayerResponse(html: string): JsonObject {
   ];
   let bestResponse: JsonObject | null = null;
   let bestScore = -1;
+  let bestMatchingResponse: JsonObject | null = null;
+  let bestMatchingScore = -1;
 
   for (const marker of markers) {
     let markerIndex = html.indexOf(marker);
@@ -327,6 +472,10 @@ export function extractPlayerResponse(html: string): JsonObject {
             bestResponse = candidate;
             bestScore = score;
           }
+          if (expectedVideoId && candidate.videoDetails?.videoId === expectedVideoId && score > bestMatchingScore) {
+            bestMatchingResponse = candidate;
+            bestMatchingScore = score;
+          }
         } catch {
           // Another marker occurrence may contain the serialized player payload.
         }
@@ -335,6 +484,7 @@ export function extractPlayerResponse(html: string): JsonObject {
     }
   }
 
+  if (bestMatchingResponse) return bestMatchingResponse;
   if (bestResponse) return bestResponse;
   throw new Error('YouTube player response was not found');
 }
@@ -343,14 +493,30 @@ export function extractVideoDetails(
   initialData: JsonObject,
   html: string,
   suppliedPlayerResponse?: JsonObject,
+  expectedVideoId?: string,
 ): VideoDetailMetadata {
   let playerResponse: JsonObject = suppliedPlayerResponse ?? {};
   if (!suppliedPlayerResponse) {
     try {
-      playerResponse = extractPlayerResponse(html);
+      playerResponse = extractPlayerResponse(html, expectedVideoId);
     } catch {
       // Some video pages still expose useful engagement fields in ytInitialData.
     }
+  }
+  if (expectedVideoId) {
+    const currentId = initialData?.currentVideoEndpoint?.watchEndpoint?.videoId;
+    const playerId = playerResponse?.videoDetails?.videoId;
+    const metaUrl = extractMetaContent(html, 'property', 'og:url');
+    const metaId = metaUrl ? publicVideoId(metaUrl) : null;
+    if ((typeof currentId === 'string' && currentId !== expectedVideoId)
+      || (typeof playerId === 'string' && playerId !== expectedVideoId)
+      || (metaId && metaId !== expectedVideoId)) {
+      throw detailFailure('Public detail metadata belongs to a different video.', 'video-identity-mismatch');
+    }
+    if (suppliedPlayerResponse && playerId !== expectedVideoId) {
+      throw detailFailure('Public player metadata did not confirm the requested video ID.', 'video-identity-unconfirmed');
+    }
+    if (playerId !== expectedVideoId) playerResponse = {};
   }
 
   let primaryInfo: JsonObject | null = null;
@@ -368,8 +534,10 @@ export function extractVideoDetails(
   const secondary = secondaryInfo as JsonObject | null;
   const likes = likeEntity as JsonObject | null;
   const comments = commentsHeader as JsonObject | null;
-  const embeddedVideoDetails = extractBestEmbeddedObject(html, '"videoDetails":', scoreVideoDetails) ?? {};
-  const embeddedMicroformat = extractBestEmbeddedObject(
+  // Independent embedded snippets are not an identified pair. With an expected ID, use only
+  // the matching complete player response or page-level meta tags, never mix suggested videos.
+  const embeddedVideoDetails = expectedVideoId ? {} : extractBestEmbeddedObject(html, '"videoDetails":', scoreVideoDetails) ?? {};
+  const embeddedMicroformat = expectedVideoId ? {} : extractBestEmbeddedObject(
     html,
     '"playerMicroformatRenderer":',
     scoreMicroformat,
@@ -393,6 +561,16 @@ export function extractVideoDetails(
     ?? extractMetaContent(html, 'itemprop', 'uploadDate')
     ?? extractMetaContent(html, 'property', 'article:published_time');
   const metaDurationSeconds = parseIsoDuration(extractMetaContent(html, 'itemprop', 'duration'));
+  // A visible day belongs to the verified watch page, not a suggested video or rounded age.
+  const currentVideoId = initialData?.currentVideoEndpoint?.watchEndpoint?.videoId;
+  const pageMetaUrl = extractMetaContent(html, 'property', 'og:url');
+  const identifiedPage = expectedVideoId && (currentVideoId === expectedVideoId
+    || pageMetaUrl && publicVideoId(pageMetaUrl) === expectedVideoId);
+  const watchResults = initialData?.contents?.twoColumnWatchNextResults?.results?.results?.contents
+    ?? initialData?.contents?.singleColumnWatchNextResults?.results?.results?.contents;
+  const scopedPrimary = identifiedPage && Array.isArray(watchResults)
+    ? watchResults.find((entry: JsonObject) => entry.videoPrimaryInfoRenderer)?.videoPrimaryInfoRenderer : null;
+  const visiblePublicationDay = parsePublicPublicationDay(textContent(scopedPrimary?.dateText));
 
   const playerViewCount = parseCountValue(videoDetails.viewCount ?? microformat.viewCount);
   const viewCount = textContent(primary?.viewCount?.videoViewCountRenderer?.originalViewCount)
@@ -433,7 +611,7 @@ export function extractVideoDetails(
     durationSeconds: Number.isSafeInteger(rawDuration) && rawDuration >= 0 ? rawDuration : metaDurationSeconds,
     publishedDate: typeof microformat.publishDate === 'string'
       ? microformat.publishDate
-      : typeof microformat.uploadDate === 'string' ? microformat.uploadDate : metaPublishedDate,
+      : typeof microformat.uploadDate === 'string' ? microformat.uploadDate : metaPublishedDate ?? visiblePublicationDay,
     thumbnailUrl: thumbnails.length ? thumbnails[thumbnails.length - 1]?.url ?? null : null,
     description: typeof videoDetails.shortDescription === 'string'
       ? videoDetails.shortDescription
@@ -443,6 +621,17 @@ export function extractVideoDetails(
       ? microformat.category
       : textContent(microformat.category) ?? metaCategory,
   };
+}
+
+export function publicVideoId(value: string): string | null {
+  try {
+    const url = new URL(value, 'https://www.youtube.com');
+    if (!['www.youtube.com', 'youtube.com', 'm.youtube.com'].includes(url.hostname)) return null;
+    return url.pathname === '/watch' ? url.searchParams.get('v')
+      : url.pathname.match(/^\/(?:shorts|live)\/([^/?#]+)\/?$/)?.[1] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function extractVideos(initialData: JsonObject) {
@@ -571,7 +760,7 @@ export function extractPlaylists(initialData: JsonObject): PlaylistMetadata[] {
       if (renderer?.playlistId) addPlaylist(renderer, renderer.playlistId);
     }
     const lockup = object.lockupViewModel;
-    if (lockup?.contentId && /PLAYLIST/i.test(lockup.contentType ?? '')) {
+    if (lockup && isPlaylistLockup(lockup)) {
       addPlaylist(lockup, lockup.contentId);
     }
   });
@@ -633,6 +822,7 @@ export function extractCommunityPosts(initialData: JsonObject): CommunityPostMet
 
 export function extractSearchChannelUrls(initialData: JsonObject, maximum: number): string[] {
   const urls = new Set<string>();
+  const channelIds = new Set<string>();
 
   const addUrl = (rawUrl: unknown): void => {
     if (urls.size >= maximum || typeof rawUrl !== 'string') return;
@@ -643,8 +833,12 @@ export function extractSearchChannelUrls(initialData: JsonObject, maximum: numbe
   walkObjects(initialData, (object) => {
     const channel = object.channelRenderer;
     if (channel) {
+      const channelId = typeof channel.channelId === 'string' ? channel.channelId : null;
+      if (channelId && channelIds.has(channelId)) return;
+      const before = urls.size;
       addUrl(channel.navigationEndpoint?.commandMetadata?.webCommandMetadata?.url);
-      if (channel.channelId) addUrl(`/channel/${channel.channelId}`);
+      if (urls.size === before && channelId) addUrl(`/channel/${channelId}`);
+      if (urls.size > before && channelId) channelIds.add(channelId);
     }
   }, () => urls.size >= maximum);
 
@@ -844,6 +1038,39 @@ function parseIsoDuration(value: string | null): number | null {
     + Number.parseInt(match[3] ?? '0', 10);
 }
 
+/** Parse only an explicit English calendar day; never relative ages or ambiguous numerals. */
+function parsePublicPublicationDay(value: string | null): string | null {
+  if (!value) return null;
+  const match = /^(?:(?:Premiered|Streamed live on)\s+)?([a-z]+)\s+(\d{1,2}),\s+(\d{4})$/i.exec(value.trim());
+  if (!match) return null;
+  const names = ['jan', 'january', 'feb', 'february', 'mar', 'march', 'apr', 'april', 'may',
+    'jun', 'june', 'jul', 'july', 'aug', 'august', 'sep', 'sept', 'september', 'oct', 'october',
+    'nov', 'november', 'dec', 'december'];
+  const name = match[1].toLowerCase();
+  if (!names.includes(name)) return null;
+  const month = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+    .indexOf(name.slice(0, 3));
+  const day = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(Date.UTC(year, month, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month || date.getUTCDate() !== day) return null;
+  return `${match[3]}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function extractJsonObjectSetting(html: string, key: string): JsonObject | null {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`"${escapedKey}"\\s*:\\s*`).exec(html);
+  if (!match) return null;
+  const start = match.index + match[0].length;
+  if (html[start] !== '{') return null;
+  const end = findJsonObjectEnd(html, start, 262_144);
+  if (end < 0) return null;
+  try {
+    const value = JSON.parse(html.slice(start, end + 1));
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  } catch { return null; }
+}
+
 function extractJsonStringSetting(html: string, key: string): string | null {
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const match = html.match(new RegExp(`"${escapedKey}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`));
@@ -946,12 +1173,12 @@ function containsEmailAddress(value: string): boolean {
   return /[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(value);
 }
 
-function findJsonObjectEnd(source: string, start: number): number {
+function findJsonObjectEnd(source: string, start: number, maximumLength = source.length - start): number {
   let depth = 0;
   let inString = false;
   let escaped = false;
 
-  for (let index = start; index < source.length; index += 1) {
+  for (let index = start; index < Math.min(source.length, start + maximumLength); index += 1) {
     const character = source[index];
     if (inString) {
       if (escaped) escaped = false;

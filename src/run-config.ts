@@ -1,5 +1,6 @@
 import type { ProxyConfigurationOptions } from 'apify';
 
+import { normalizeDateWindow } from './publication-window.js';
 import type { ActorInput, ScrapeMode } from './types.js';
 
 export const MAX_CHANNELS_PER_RUN = 50;
@@ -12,6 +13,8 @@ export const MAX_SHORTS_PER_CHANNEL = 50;
 export const MAX_LIVE_STREAMS_PER_CHANNEL = 50;
 export const MAX_PLAYLISTS_PER_CHANNEL = 50;
 export const MAX_COMMUNITY_POSTS_PER_CHANNEL = 50;
+export const MAX_PAGES_PER_SECTION = 5;
+export const MAX_REQUESTS_PER_CHANNEL = 50;
 
 type ActorProxyOptions = ProxyConfigurationOptions & { useApifyProxy?: boolean };
 
@@ -30,7 +33,12 @@ export interface NormalizedActorInput {
   maxPlaylistsPerChannel: number;
   includeCommunityPosts: boolean;
   maxCommunityPostsPerChannel: number;
+  publishedAfter: string | null;
+  publishedBefore: string | null;
+  maxPagesPerSection: number;
+  maxRequestsPerChannel: number;
   proxyOptions: ActorProxyOptions | undefined;
+  metadataProxyFallback: boolean;
   maxRequestsPerCrawl: number;
 }
 
@@ -106,9 +114,23 @@ export function normalizeActorInput(input: ActorInput): NormalizedActorInput {
   const maxCommunityPostsPerChannel = readBoundedInteger(
     input.maxCommunityPostsPerChannel, 1, MAX_COMMUNITY_POSTS_PER_CHANNEL, 10, 'maxCommunityPostsPerChannel',
   );
+  const { publishedAfter, publishedBefore } = normalizeDateWindow(input.publishedAfter, input.publishedBefore);
+  const maxPagesPerSection = readBoundedInteger(
+    input.maxPagesPerSection, 1, MAX_PAGES_PER_SECTION, 1, 'maxPagesPerSection',
+  );
+  const maxRequestsPerChannel = readBoundedInteger(
+    input.maxRequestsPerChannel, 1, MAX_REQUESTS_PER_CHANNEL, 30, 'maxRequestsPerChannel',
+  );
 
   if (channelUrls.length === 0 && searchKeywords.length === 0) {
     throw new Error('Provide at least one YouTube channel URL, @handle, or search keyword.');
+  }
+  if (input.metadataProxyFallback !== undefined && typeof input.metadataProxyFallback !== 'boolean') {
+    throw new Error('metadataProxyFallback must be a boolean.');
+  }
+  const proxyOptions = buildProxyConfigurationOptions(input.proxyConfiguration);
+  if (input.metadataProxyFallback && proxyOptions) {
+    throw new Error('metadataProxyFallback requires direct main requests; do not combine it with proxyConfiguration.');
   }
 
   return {
@@ -126,7 +148,12 @@ export function normalizeActorInput(input: ActorInput): NormalizedActorInput {
     maxPlaylistsPerChannel,
     includeCommunityPosts: input.includeCommunityPosts ?? false,
     maxCommunityPostsPerChannel,
-    proxyOptions: buildProxyConfigurationOptions(input.proxyConfiguration),
+    publishedAfter,
+    publishedBefore,
+    maxPagesPerSection,
+    maxRequestsPerChannel,
+    proxyOptions,
+    metadataProxyFallback: input.metadataProxyFallback ?? false,
     maxRequestsPerCrawl: (mode === 'detailed' ? MAX_DETAILED_CHANNELS_PER_RUN : MAX_CHANNELS_PER_RUN)
       + searchKeywords.length,
   };

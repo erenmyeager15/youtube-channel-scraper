@@ -1,12 +1,14 @@
 # YouTube Scraper: Channels, Shorts, Live & Posts
 
+Use optional publication windows and bounded pagination to collect relevant public content, then inspect the coverage summary to see exactly where collection stopped.
+
 Track competitor and creator channels from one dataset. Scrape public channel stats, recent videos, Shorts, live streams, playlists, channel-authored community posts, websites, and social profiles without a YouTube login or API key.
 
 The Actor uses bounded HTTP requests to read public YouTube pages and parses YouTube's embedded public data. It returns only fields YouTube exposes publicly and marks unavailable fields as `null`.
 
 **Price:** $3 per 1,000 successfully saved channels on the FREE Store tier, with discounts down to $2.55 per 1,000. One channel charge includes all selected content rows—there is no separate charge for each video, Short, playlist, or post. A one-channel run is approximately $0.00305 including the minimum start event.
 
-**Best for:** competitor publishing trackers, creator research tables, channel watchlists, and recurring reports. The Actor reads the initially loaded public content grids; it is not a full historical export of every upload.
+**Best for:** competitor publishing trackers, creator research tables, channel watchlists, and recurring reports. The default reads one public content page per selected tab; opt-in pagination remains bounded and is not a full historical export of every upload.
 
 ## Track a competitor channel
 
@@ -51,6 +53,8 @@ Switch to detailed mode when you also need public websites, classified social pr
 
 Export the results as JSON, CSV, Excel, XML, or HTML, or consume them through the Apify API, schedules, webhooks, Make, Zapier, n8n, and other integrations.
 
+If direct detailed metadata is withheld by a confirmed YouTube automation check, you can explicitly set `"metadataProxyFallback": true`. This uses Apify Residential only for compact player metadata, not full pages or video/audio files. It requires Residential access and adds proxy usage costs. It is disabled by default and must not be combined with full-page `proxyConfiguration`. Availability is still source-dependent; inspect `RUN-SUMMARY.metadataFallback` and detailed failures rather than assuming every field was returned.
+
 ## What it extracts
 
 ### Channel rows
@@ -73,6 +77,8 @@ Export the results as JSON, CSV, Excel, XML, or HTML, or consume them through th
 - View count as displayed and as a parsed number
 - Duration in seconds and formatted text
 - Relative published date shown by YouTube
+- `sourceDateText`, `publishedAt`, `publishedAtPrecision`, earliest/latest publication bounds, and `publicationWindowMatch`. Relative ages are approximate intervals, never exact timestamps; missing dates remain unknown.
+- Detailed mode can retain a video-ID-verified calendar date from the main watch page when the player timestamp is unavailable. This stays day-level precision; it is not an invented upload time.
 - Thumbnail URL
 - Content classification as `video`, `short`, or `live_stream`
 - Live status when YouTube exposes it
@@ -85,10 +91,13 @@ Export the results as JSON, CSV, Excel, XML, or HTML, or consume them through th
 - Channel URL and channel name
 - Extraction timestamp
 
+The Playlists tab may also contain show-style collections. These are saved as playlist rows only when their public destination confirms the same playlist ID; unrelated show or recommendation cards are excluded.
+
 ### Community-post rows
 
 - Post URL, ID, channel-authored public text, thumbnail or attachment URL
 - Published-date text and public like/comment counts when YouTube exposes them
+- The same publication precision and window-match fields as video rows
 - Channel URL and channel name
 - Extraction timestamp
 
@@ -103,6 +112,26 @@ One run can write four record types to the default dataset:
 - The `Playlists` view shows playlist records.
 - The `Community posts` view shows channel-authored post records.
 - Every row has an explicit `recordType` field for reliable filtering.
+
+`RUN-SUMMARY` in the default key-value store reports each requested tab's inspected pages, rows seen/selected/saved, excluded rows, date uncertainty, remaining-page signal and stop reason. Failed detailed requests carry fixed stage/category codes and, when available, a recognized public `playerStatus` such as `LOGIN_REQUIRED`; never raw source errors, response bodies, anonymous visitor values, API keys or proxy URLs. This report is separate from the dataset and adds no channel charge. Disabled tabs are omitted. `complete` means a recognized feed ended without a cap, parsing/fetch failure or uncertain date eligibility; it is not a guarantee that YouTube exposed all content or every optional field. A successful run can still have incomplete coverage.
+
+## Bounded publication-window collection
+
+```json
+{
+  "channelUrls": ["https://www.youtube.com/@mkbhd"],
+  "mode": "fast",
+  "maxVideosPerChannel": 25,
+  "maxPagesPerSection": 3,
+  "maxRequestsPerChannel": 15,
+  "publishedAfter": "2026-09-01",
+  "publishedBefore": "2026-09-30"
+}
+```
+
+Date-only inputs include the entire UTC day. Timestamp inputs must include a timezone. Videos, Shorts, live streams and community posts are excluded only when their known date or approximate interval is wholly outside the window. Unknown dates and boundary overlaps stay in the output with `publicationWindowMatch: "uncertain"`; filter these explicitly if your workflow requires certain matches. Upcoming streams may have unknown publication dates. Playlists have no reliable public publication date here and are not date-filtered.
+
+Date filtering does not assume chronological ordering or stop at the first old card: pinned and reordered items can appear later. It does not guarantee a target number of matching rows. Detailed-mode dates may exclude a previously uncertain selected row; the scraper does not perform unbounded refill requests. The existing channel charge applies when channel metadata is saved, even if no content matches your window.
 
 ### Verified channel sample
 
@@ -150,7 +179,10 @@ Counts, titles, thumbnails, and relative dates can change when YouTube updates t
 | `searchKeywords` | array | Empty | Up to 10 optional keywords used to discover channels |
 | `mode` | string | `fast` | `fast` for low-request monitoring or `detailed` for About and selected video-page fields |
 | `maxChannels` | integer | `1` | Maximum channels scraped per search keyword, from 1 to 50 |
-| `maxVideosPerChannel` | integer | `1` | Maximum latest rows saved from the currently loaded public Videos grid, from 1 to 100 |
+| `maxVideosPerChannel` | integer | `1` | Maximum selected rows from inspected public Videos pages, from 1 to 100 |
+| `maxPagesPerSection` | integer | `1` | Initial page plus public continuations, 1–5 pages per selected content tab |
+| `maxRequestsPerChannel` | integer | `30` | Shared source HTTP-attempt cap, 1–50, including retries, redirects, initial/About/tab/detail/player and continuation requests |
+| `publishedAfter` / `publishedBefore` | string | Disabled | Inclusive UTC dates or timezone-qualified timestamps; uncertain dates stay visible |
 | `maxDetailedVideosPerChannel` | integer | `1` | Detailed mode only: enrich the first 0 to 5 saved video rows per channel |
 | `includeShorts` | boolean | `false` | Read the public Shorts tab and save Shorts as separate video records |
 | `maxShortsPerChannel` | integer | `10` | Maximum Shorts saved per channel, from 1 to 50 |
@@ -193,7 +225,7 @@ This Actor uses Pay Per Event pricing.
 
 The Actor defaults to 256 MB of memory and can be raised to 1 GB for larger batches. Actor-start billing uses a minimum of one event, so the startup charge remains approximately $0.00005 per run at the default memory. All selected content rows are included in the channel charge—there is no extra per-video, per-Short, per-playlist, or per-post event fee. A one-channel run on the FREE Store tier is therefore approximately $0.00305 before any applicable account-level charges.
 
-Failed channel extractions and duplicate channel aliases are not charged as `channel-scraped` events. When a maximum-cost limit is reached, the Actor finishes cleanly after storing the current paid channel and its available video rows, then skips queued channel work.
+Failed channel extractions and duplicate channel aliases are not charged as `channel-scraped` events. When a maximum-cost limit is reached, the Actor completes the bounded available content bundle for a successfully saved current channel, then skips queued channel work. A rejected channel save does not trigger its content requests. This event-charge limit is not a hard cap on platform execution, proxy or build costs.
 
 ## Limits and reliability
 
@@ -201,13 +233,19 @@ Failed channel extractions and duplicate channel aliases are not charged as `cha
 - Subscriber counts can be hidden or abbreviated.
 - Search results depend on region and YouTube ranking.
 - Fast runs are capped at 50 unique channels. Detailed runs are capped at 10 channels and 5 enriched video pages per channel. Requests are sequential and use bounded retries.
-- Optional Shorts, Live, Playlists, and Posts sections each use one bounded public-tab request per channel. A channel may not expose every tab.
-- Content tabs currently read YouTube's initially loaded public grid. The Actor does not yet follow continuation pages, so the configured maximum is also bounded by what YouTube includes in that first response.
+- Optional Shorts, Live, Playlists and Posts share one per-channel attempt budget. They use one page by default and follow at most five pages when explicitly requested. A channel may not expose every tab; a missing/unsupported tab is incomplete, not a confirmed empty feed.
+- Pagination uses public browse configuration and scoped channel-feed continuation tokens. It stops at row/page/request limits, repeated tokens, no progress, unavailable data or ambiguous response structure. It never follows recommendations, comments or engagement-panel continuations.
+- Each channel's source collection has a 240-second deadline; each request is limited to 30 seconds or the remaining deadline, and each decoded response to 8 MiB. These are defensive bounds, not a guaranteed run-time, memory or spending cap. Searches have a separate four-attempt/120-second budget per keyword.
+- Additional pages and detailed fields require more source requests. Channel event prices are unchanged; choose modest row/page/request limits for recurring watchlists. Optional proxies and account-level charges may add costs.
 - Shorts detection prefers YouTube's explicit `/shorts/` route. Duration is only a fallback because Shorts can now be up to three minutes and ordinary videos can be shorter than one minute.
 - If a channel page succeeds but its Videos tab is unavailable, the Actor saves and charges the channel metadata row without fabricating video rows.
 - Public like and comment totals are not present in every YouTube page payload. When YouTube exposes a label without a number, count fields remain `null`.
 - Community output contains only posts authored by the selected public channel. It does not collect commenter identities or comment text.
 - Detailed fields are public page data, not private analytics, and can be hidden or changed by YouTube or the channel owner.
+- An anonymous cloud player request may return `LOGIN_REQUIRED` even when the public watch page is readable. The Actor retains verified watch-page fields and reports missing details; it does not use account login cookies, invent category/tags, or automatically enable a paid proxy. A proxy is optional and does not guarantee access.
+- A confirmed "not a bot" player response is reported as `source-automation-check`. Further player API calls in that channel session stop, while available watch-page fields and other bounded public content collection remain eligible. This does not mark missing details as complete. A new channel budget is independent; generic sign-in or video-specific restrictions are not treated as a session-wide automation block.
+- The opt-in metadata fallback allows one Residential attempt per selected detailed video, at most five per channel. It stops paid attempts for that channel after a fallback failure. Compact responses are bounded to 32 KiB each and 64 KiB of successfully read decoded bodies per channel, with no redirects. Network overhead, provider setup and bytes received before an oversized response is cut off mean these are not guaranteed traffic or spending caps. A proxy failure never enables another provider, full-page proxying, login cookies or extra retries.
+- Requests within one channel collection reuse an anonymous browser-header session and, when a proxy was explicitly selected, the same proxy session ID. Proxy setup is deadline-bounded; a failed selected proxy does not silently switch to a direct request. Provider session expiry or interruption can still change the connection.
 - External-link classification recognizes Facebook, Instagram, LinkedIn, X/Twitter, YouTube, TikTok, Reddit, Twitch, Threads, and Discord; other accepted HTTP(S) links are returned as websites.
 - Email addresses and `mailto:` links are not collected. Email addresses and phone numbers found in public descriptions are redacted.
 - The Actor reads public pages only and does not access YouTube Studio, private analytics, account data, or private videos.

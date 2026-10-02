@@ -37,33 +37,114 @@
       "display": {
         "component": "table",
         "properties": {
-          "recordType": { "label": "Record Type", "format": "text" },
-          "channelName": { "label": "Channel Name", "format": "text" },
-          "handle": { "label": "Handle", "format": "text" },
-          "channelId": { "label": "Channel ID", "format": "text" },
-          "subscriberCount": { "label": "Subscribers", "format": "text" },
-          "subscriberCountNumber": { "label": "Subscribers (number)", "format": "number" },
-          "totalViews": { "label": "Total Views", "format": "text" },
-          "totalViewsNumber": { "label": "Total Views (number)", "format": "number" },
-          "totalVideoCount": { "label": "Videos", "format": "text" },
-          "totalVideoCountNumber": { "label": "Videos (number)", "format": "number" },
-          "joinDate": { "label": "Joined", "format": "text" },
-          "country": { "label": "Country", "format": "text" },
-          "websiteLinks": { "label": "Websites", "format": "text" },
-          "socialProfiles": { "label": "Social Profiles", "format": "text" },
-          "externalLinks": { "label": "Named External Links", "format": "text" },
-          "socialLinks": { "label": "All External URLs", "format": "text" },
-          "channelDescription": { "label": "Description", "format": "text" },
-          "avatarImageUrl": { "label": "Avatar", "format": "image" },
-          "isVerified": { "label": "Verified", "format": "boolean" },
-          "channelUrl": { "label": "Channel URL", "format": "link" },
-          "canonicalChannelUrl": { "label": "Canonical Channel", "format": "link" },
-          "videosUrl": { "label": "Videos", "format": "link" },
-          "shortsUrl": { "label": "Shorts", "format": "link" },
-          "liveStreamsUrl": { "label": "Live Streams", "format": "link" },
-          "playlistsUrl": { "label": "Playlists", "format": "link" },
-          "communityUrl": { "label": "Community", "format": "link" },
-          "scrapedAt": { "label": "Scraped at", "format": "date" }
+          "recordType": {
+            "label": "Record Type",
+            "format": "text"
+          },
+          "channelName": {
+            "label": "Channel Name",
+            "format": "text"
+          },
+          "handle": {
+            "label": "Handle",
+            "format": "text"
+          },
+          "channelId": {
+            "label": "Channel ID",
+            "format": "text"
+          },
+          "subscriberCount": {
+            "label": "Subscribers",
+            "format": "text"
+          },
+          "subscriberCountNumber": {
+            "label": "Subscribers (number)",
+            "format": "number"
+          },
+          "totalViews": {
+            "label": "Total Views",
+            "format": "text"
+          },
+          "totalViewsNumber": {
+            "label": "Total Views (number)",
+            "format": "number"
+          },
+          "totalVideoCount": {
+            "label": "Videos",
+            "format": "text"
+          },
+          "totalVideoCountNumber": {
+            "label": "Videos (number)",
+            "format": "number"
+          },
+          "joinDate": {
+            "label": "Joined",
+            "format": "text"
+          },
+          "country": {
+            "label": "Country",
+            "format": "text"
+          },
+          "websiteLinks": {
+            "label": "Websites",
+            "format": "text"
+          },
+          "socialProfiles": {
+            "label": "Social Profiles",
+            "format": "text"
+          },
+          "externalLinks": {
+            "label": "Named External Links",
+            "format": "text"
+          },
+          "socialLinks": {
+            "label": "All External URLs",
+            "format": "text"
+          },
+          "channelDescription": {
+            "label": "Description",
+            "format": "text"
+          },
+          "avatarImageUrl": {
+            "label": "Avatar",
+            "format": "image"
+          },
+          "isVerified": {
+            "label": "Verified",
+            "format": "boolean"
+          },
+          "channelUrl": {
+            "label": "Channel URL",
+            "format": "link"
+          },
+          "canonicalChannelUrl": {
+            "label": "Canonical Channel",
+            "format": "link"
+          },
+          "videosUrl": {
+            "label": "Videos",
+            "format": "link"
+          },
+          "shortsUrl": {
+            "label": "Shorts",
+            "format": "link"
+          },
+          "liveStreamsUrl": {
+            "label": "Live Streams",
+            "format": "link"
+          },
+          "playlistsUrl": {
+            "label": "Playlists",
+            "format": "link"
+          },
+          "communityUrl": {
+            "label": "Community",
+            "format": "link"
+          },
+          "scrapedAt": {
+            "label": "Scraped at",
+            "format": "date"
+          }
         }
       }
     },
@@ -85,6 +166,12 @@
           "durationSeconds",
           "durationFormatted",
           "publishedDate",
+          "sourceDateText",
+          "publishedAt",
+          "publishedAtPrecision",
+          "publishedAtEarliest",
+          "publishedAtLatest",
+          "publicationWindowMatch",
           "category",
           "tags",
           "videoDescription",
@@ -98,28 +185,118 @@
       "display": {
         "component": "table",
         "properties": {
-          "recordType": { "label": "Record Type", "format": "text" },
-          "contentType": { "label": "Content Type", "format": "text" },
-          "videoId": { "label": "Video ID", "format": "text" },
-          "videoTitle": { "label": "Title", "format": "text" },
-          "channelName": { "label": "Channel", "format": "text" },
-          "viewCount": { "label": "Views", "format": "text" },
-          "viewCountNumber": { "label": "Views (number)", "format": "number" },
-          "likeCount": { "label": "Likes", "format": "text" },
-          "likeCountNumber": { "label": "Likes (number)", "format": "number" },
-          "commentCount": { "label": "Comments", "format": "text" },
-          "commentCountNumber": { "label": "Comments (number)", "format": "number" },
-          "durationSeconds": { "label": "Duration (seconds)", "format": "number" },
-          "durationFormatted": { "label": "Duration", "format": "text" },
-          "publishedDate": { "label": "Published", "format": "text" },
-          "category": { "label": "Category", "format": "text" },
-          "tags": { "label": "Tags", "format": "text" },
-          "videoDescription": { "label": "Description", "format": "text" },
-          "thumbnailUrl": { "label": "Thumbnail", "format": "image" },
-          "isShorts": { "label": "Shorts", "format": "boolean" },
-          "liveStatus": { "label": "Live Status", "format": "text" },
-          "videoUrl": { "label": "Video URL", "format": "link" },
-          "scrapedAt": { "label": "Scraped at", "format": "date" }
+          "recordType": {
+            "label": "Record Type",
+            "format": "text"
+          },
+          "contentType": {
+            "label": "Content Type",
+            "format": "text"
+          },
+          "videoId": {
+            "label": "Video ID",
+            "format": "text"
+          },
+          "videoTitle": {
+            "label": "Title",
+            "format": "text"
+          },
+          "channelName": {
+            "label": "Channel",
+            "format": "text"
+          },
+          "viewCount": {
+            "label": "Views",
+            "format": "text"
+          },
+          "viewCountNumber": {
+            "label": "Views (number)",
+            "format": "number"
+          },
+          "likeCount": {
+            "label": "Likes",
+            "format": "text"
+          },
+          "likeCountNumber": {
+            "label": "Likes (number)",
+            "format": "number"
+          },
+          "commentCount": {
+            "label": "Comments",
+            "format": "text"
+          },
+          "commentCountNumber": {
+            "label": "Comments (number)",
+            "format": "number"
+          },
+          "durationSeconds": {
+            "label": "Duration (seconds)",
+            "format": "number"
+          },
+          "durationFormatted": {
+            "label": "Duration",
+            "format": "text"
+          },
+          "publishedDate": {
+            "label": "Published",
+            "format": "text"
+          },
+          "category": {
+            "label": "Category",
+            "format": "text"
+          },
+          "tags": {
+            "label": "Tags",
+            "format": "text"
+          },
+          "videoDescription": {
+            "label": "Description",
+            "format": "text"
+          },
+          "thumbnailUrl": {
+            "label": "Thumbnail",
+            "format": "image"
+          },
+          "isShorts": {
+            "label": "Shorts",
+            "format": "boolean"
+          },
+          "liveStatus": {
+            "label": "Live Status",
+            "format": "text"
+          },
+          "videoUrl": {
+            "label": "Video URL",
+            "format": "link"
+          },
+          "scrapedAt": {
+            "label": "Scraped at",
+            "format": "date"
+          },
+          "sourceDateText": {
+            "label": "Source date label",
+            "format": "text"
+          },
+          "publishedAt": {
+            "label": "Known publication time/day",
+            "format": "date"
+          },
+          "publishedAtPrecision": {
+            "label": "Date precision",
+            "format": "text"
+          },
+          "publishedAtEarliest": {
+            "label": "Earliest publication bound",
+            "format": "date"
+          },
+          "publishedAtLatest": {
+            "label": "Latest publication bound",
+            "format": "date"
+          },
+          "publicationWindowMatch": {
+            "label": "Publication window match",
+            "format": "text"
+          }
         }
       }
     },
@@ -142,16 +319,46 @@
       "display": {
         "component": "table",
         "properties": {
-          "recordType": { "label": "Record Type", "format": "text" },
-          "playlistTitle": { "label": "Playlist", "format": "text" },
-          "channelName": { "label": "Channel", "format": "text" },
-          "playlistId": { "label": "Playlist ID", "format": "text" },
-          "videoCount": { "label": "Videos", "format": "text" },
-          "videoCountNumber": { "label": "Videos (number)", "format": "number" },
-          "thumbnailUrl": { "label": "Thumbnail", "format": "image" },
-          "playlistUrl": { "label": "Playlist URL", "format": "link" },
-          "channelUrl": { "label": "Channel URL", "format": "link" },
-          "scrapedAt": { "label": "Scraped at", "format": "date" }
+          "recordType": {
+            "label": "Record Type",
+            "format": "text"
+          },
+          "playlistTitle": {
+            "label": "Playlist",
+            "format": "text"
+          },
+          "channelName": {
+            "label": "Channel",
+            "format": "text"
+          },
+          "playlistId": {
+            "label": "Playlist ID",
+            "format": "text"
+          },
+          "videoCount": {
+            "label": "Videos",
+            "format": "text"
+          },
+          "videoCountNumber": {
+            "label": "Videos (number)",
+            "format": "number"
+          },
+          "thumbnailUrl": {
+            "label": "Thumbnail",
+            "format": "image"
+          },
+          "playlistUrl": {
+            "label": "Playlist URL",
+            "format": "link"
+          },
+          "channelUrl": {
+            "label": "Channel URL",
+            "format": "link"
+          },
+          "scrapedAt": {
+            "label": "Scraped at",
+            "format": "date"
+          }
         }
       }
     },
@@ -164,6 +371,12 @@
           "postId",
           "postText",
           "publishedDate",
+          "sourceDateText",
+          "publishedAt",
+          "publishedAtPrecision",
+          "publishedAtEarliest",
+          "publishedAtLatest",
+          "publicationWindowMatch",
           "likeCount",
           "likeCountNumber",
           "commentCount",
@@ -179,21 +392,90 @@
       "display": {
         "component": "table",
         "properties": {
-          "recordType": { "label": "Record Type", "format": "text" },
-          "channelName": { "label": "Channel", "format": "text" },
-          "postId": { "label": "Post ID", "format": "text" },
-          "postText": { "label": "Post", "format": "text" },
-          "publishedDate": { "label": "Published", "format": "text" },
-          "likeCount": { "label": "Likes", "format": "text" },
-          "likeCountNumber": { "label": "Likes (number)", "format": "number" },
-          "commentCount": { "label": "Comments", "format": "text" },
-          "commentCountNumber": { "label": "Comments (number)", "format": "number" },
-          "attachmentType": { "label": "Attachment", "format": "text" },
-          "attachmentUrl": { "label": "Attachment URL", "format": "link" },
-          "imageUrl": { "label": "Image", "format": "image" },
-          "postUrl": { "label": "Post URL", "format": "link" },
-          "channelUrl": { "label": "Channel URL", "format": "link" },
-          "scrapedAt": { "label": "Scraped at", "format": "date" }
+          "recordType": {
+            "label": "Record Type",
+            "format": "text"
+          },
+          "channelName": {
+            "label": "Channel",
+            "format": "text"
+          },
+          "postId": {
+            "label": "Post ID",
+            "format": "text"
+          },
+          "postText": {
+            "label": "Post",
+            "format": "text"
+          },
+          "publishedDate": {
+            "label": "Published",
+            "format": "text"
+          },
+          "likeCount": {
+            "label": "Likes",
+            "format": "text"
+          },
+          "likeCountNumber": {
+            "label": "Likes (number)",
+            "format": "number"
+          },
+          "commentCount": {
+            "label": "Comments",
+            "format": "text"
+          },
+          "commentCountNumber": {
+            "label": "Comments (number)",
+            "format": "number"
+          },
+          "attachmentType": {
+            "label": "Attachment",
+            "format": "text"
+          },
+          "attachmentUrl": {
+            "label": "Attachment URL",
+            "format": "link"
+          },
+          "imageUrl": {
+            "label": "Image",
+            "format": "image"
+          },
+          "postUrl": {
+            "label": "Post URL",
+            "format": "link"
+          },
+          "channelUrl": {
+            "label": "Channel URL",
+            "format": "link"
+          },
+          "scrapedAt": {
+            "label": "Scraped at",
+            "format": "date"
+          },
+          "sourceDateText": {
+            "label": "Source date label",
+            "format": "text"
+          },
+          "publishedAt": {
+            "label": "Known publication time/day",
+            "format": "date"
+          },
+          "publishedAtPrecision": {
+            "label": "Date precision",
+            "format": "text"
+          },
+          "publishedAtEarliest": {
+            "label": "Earliest publication bound",
+            "format": "date"
+          },
+          "publishedAtLatest": {
+            "label": "Latest publication bound",
+            "format": "date"
+          },
+          "publicationWindowMatch": {
+            "label": "Publication window match",
+            "format": "text"
+          }
         }
       }
     }

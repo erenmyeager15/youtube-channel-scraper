@@ -459,14 +459,31 @@ assert.equal(embeddedOnlyDetails.publishedDate, '2026-08-20');
 assert.deepEqual(embeddedOnlyDetails.tags, ['creator research']);
 
 const mainSource = readText('src/main.ts');
+const runnerSource = readText('src/runner.ts');
 const httpSource = readText('src/youtube-http.ts');
-assert.match(mainSource, /maxRequestsPerCrawl/);
-assert.match(mainSource, /stopped at the user's spending limit/);
-assert.match(mainSource, /keeping the video-page fields/);
+const boundedHttpSource = readText('src/bounded-http.ts');
+assert.match(runnerSource, /maxRequestsPerCrawl/);
+assert.match(runnerSource, /stopped at the user's spending limit/);
+assert.match(runnerSource, /keeping the video-page fields/);
 assert.match(mainSource, /Actor\.pushData\(channelRecord, CHANNEL_SCRAPED_EVENT\)/);
 assert.doesNotMatch(mainSource, /PlaywrightCrawler|Actor\.charge\(/);
 assert.match(httpSource, /extractInitialData/);
-assert.match(httpSource, /gotScraping/);
+assert.match(httpSource, /fetchBoundedHttp/);
+assert.match(boundedHttpSource, /gotScraping\.stream/);
+assert.match(mainSource, /Actor\.setValue\('RUN-SUMMARY'/);
+assert.equal(schema.properties.maxPagesPerSection.default, 1);
+assert.equal(schema.properties.maxPagesPerSection.maximum, 5);
+assert.equal(schema.properties.maxRequestsPerChannel.default, 30);
+assert.equal(schema.properties.maxRequestsPerChannel.maximum, 50);
+const datasetSchema = readJson('.actor/dataset_schema.json');
+const outputSchema = readJson('.actor/output_schema.json');
+for (const viewName of ['videos', 'communityPosts']) {
+  for (const field of ['sourceDateText', 'publishedAt', 'publishedAtPrecision', 'publishedAtEarliest', 'publishedAtLatest', 'publicationWindowMatch']) {
+    assert.ok(datasetSchema.views[viewName].transformation.fields.includes(field));
+    assert.ok(datasetSchema.views[viewName].display.properties[field]);
+  }
+}
+assert.equal(outputSchema.properties.coverage.template, '{{links.apiDefaultKeyValueStoreUrl}}/records/RUN-SUMMARY');
 assert.doesNotMatch(httpSource, /playwright|chromium/i);
 
 console.log('Audit checks passed.');

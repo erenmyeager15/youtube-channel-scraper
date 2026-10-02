@@ -1,3 +1,5 @@
+import type { PublicationObservation, PublicationWindowMatch } from './publication-window.js';
+
 export interface ProxyConfig {
   useApifyProxy?: boolean;
   apifyProxyGroups?: string[];
@@ -22,7 +24,12 @@ export interface ActorInput {
   maxPlaylistsPerChannel?: number;
   includeCommunityPosts?: boolean;
   maxCommunityPostsPerChannel?: number;
+  maxPagesPerSection?: number;
+  maxRequestsPerChannel?: number;
+  publishedAfter?: string;
+  publishedBefore?: string;
   proxyConfiguration?: ProxyConfig;
+  metadataProxyFallback?: boolean;
 }
 
 export type ExternalLinkPlatform =
@@ -89,7 +96,7 @@ export interface ChannelRecord {
   scrapedAt: string;
 }
 
-export interface VideoRecord {
+export interface VideoRecord extends PublicationObservation {
   recordType: 'video';
   contentType: 'video' | 'short' | 'live_stream';
   videoId: string;
@@ -106,6 +113,7 @@ export interface VideoRecord {
   durationSeconds: number | null;
   durationFormatted: string | null;
   publishedDate: string | null;
+  publicationWindowMatch: PublicationWindowMatch;
   thumbnailUrl: string | null;
   videoDescription: string | null;
   tags: string[];
@@ -128,7 +136,7 @@ export interface PlaylistRecord {
   scrapedAt: string;
 }
 
-export interface CommunityPostRecord {
+export interface CommunityPostRecord extends PublicationObservation {
   recordType: 'community_post';
   channelUrl: string;
   channelName: string | null;
@@ -136,6 +144,7 @@ export interface CommunityPostRecord {
   postUrl: string;
   postText: string | null;
   publishedDate: string | null;
+  publicationWindowMatch: PublicationWindowMatch;
   likeCount: string | null;
   likeCountNumber: number | null;
   commentCount: string | null;

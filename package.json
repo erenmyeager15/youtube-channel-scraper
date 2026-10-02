@@ -8,7 +8,7 @@
     "start": "tsx src/main.ts",
     "start:compiled": "node dist/main.js",
     "build": "tsc",
-    "test": "npm run build && node scripts/audit.mjs",
+    "test": "npm run build && node scripts/audit.mjs && node --test dist/*.test.js",
     "lint": "tsc --noEmit"
   },
   "keywords": [
@@ -23,7 +23,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "apify": "^3.1.0",
-    "crawlee": "^3.11.0"
+    "crawlee": "^3.11.0",
+    "got-scraping": "4.2.1"
   },
   "devDependencies": {
     "tsx": "^4.19.0",
