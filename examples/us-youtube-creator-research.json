@@ -1,0 +1,19 @@
+{
+  "channelUrls": [
+    "https://www.youtube.com/@mkbhd",
+    "https://www.youtube.com/@ijustine"
+  ],
+  "searchKeywords": [],
+  "mode": "fast",
+  "maxVideosPerChannel": 5,
+  "maxDetailedVideosPerChannel": 0,
+  "includeShorts": true,
+  "maxShortsPerChannel": 3,
+  "includeLiveStreams": false,
+  "includePlaylists": false,
+  "includeCommunityPosts": false,
+  "maxPagesPerSection": 1,
+  "maxRequestsPerChannel": 10,
+  "metadataProxyFallback": false,
+  "proxyConfiguration": { "useApifyProxy": false }
+}

@@ -1,14 +1,70 @@
-# YouTube Scraper: Channels, Shorts, Live & Posts
+# YouTube Channel Scraper - Creator & Competitor Research
 
-Use optional publication windows and bounded pagination to collect relevant public content, then inspect the coverage summary to see exactly where collection stopped.
+Build a creator research shortlist or competitor publishing report from public YouTube data. Designed for US agencies, creator partnerships teams, and content strategists: compare channel stats, recent video topics, and Shorts without a YouTube login or API key.
 
-Track competitor and creator channels from one dataset. Scrape public channel stats, recent videos, Shorts, live streams, playlists, channel-authored community posts, websites, and social profiles without a YouTube login or API key.
+The same Actor also collects live streams, playlists, channel-authored community posts, and available public websites/social profiles. Use optional publication windows and bounded pagination, then inspect the coverage summary to see exactly where collection stopped.
 
 The Actor uses bounded HTTP requests to read public YouTube pages and parses YouTube's embedded public data. It returns only fields YouTube exposes publicly and marks unavailable fields as `null`.
 
 **Price:** $3 per 1,000 successfully saved channels on the FREE Store tier, with discounts down to $2.55 per 1,000. One channel charge includes all selected content rows—there is no separate charge for each video, Short, playlist, or post. A one-channel run is approximately $0.00305 including the minimum start event.
 
 **Best for:** competitor publishing trackers, creator research tables, channel watchlists, and recurring reports. The default reads one public content page per selected tab; opt-in pagination remains bounded and is not a full historical export of every upload.
+
+US-first describes the buyer workflow, not a source filter. Channel URLs can be global; a channel's self-reported country is not audience geography. The Actor does not expose viewer location, US audience share, watch time, retention, revenue, sponsorship rates, or private YouTube Studio analytics. It does not provide persistent growth history or automatic change reports: comparisons between snapshots happen in your own spreadsheet or reporting system.
+
+## US agency creator research
+
+Start with the [YouTube Creator Research for US Agencies task](https://apify.com/fascinating_lentil/youtube-channel-scraper/examples/us-youtube-creator-research). It uses two illustrative technology channels, MKBHD and iJustine. Replace them with your client's channels or a permission-appropriate creator/competitor shortlist; inclusion is not an endorsement, sponsorship relationship, or evidence of US audience reach.
+
+The starter requests two channel rows, up to five videos and three Shorts per channel, in Fast mode. It reads at most one public page per selected tab with ten HTTP attempts per channel, including retries. It disables detailed-video enrichment, optional extra tabs, and proxies. Availability and request budgets can produce fewer rows; this is not a promise of sixteen content rows or complete upload history.
+
+```json
+{
+  "channelUrls": [
+    "https://www.youtube.com/@mkbhd",
+    "https://www.youtube.com/@ijustine"
+  ],
+  "searchKeywords": [],
+  "mode": "fast",
+  "maxVideosPerChannel": 5,
+  "maxDetailedVideosPerChannel": 0,
+  "includeShorts": true,
+  "maxShortsPerChannel": 3,
+  "includeLiveStreams": false,
+  "includePlaylists": false,
+  "includeCommunityPosts": false,
+  "maxPagesPerSection": 1,
+  "maxRequestsPerChannel": 10,
+  "metadataProxyFallback": false,
+  "proxyConfiguration": { "useApifyProxy": false }
+}
+```
+
+At current FREE-tier prices, two successfully saved channels cost **$0.00605** in listed Actor events, including one $0.00005 start event at 256 MB. At the lowest current discounted channel price, the same events cost **$0.00515**. Selected content is bundled into each channel event, not billed per video or Short. These are fee calculations, not measured operating costs or a profitability guarantee. Optional proxy traffic adds costs.
+
+This starter is a saved configuration, **not newly live tested** as part of this documentation release. It does not run automatically, create a schedule, or save a historical comparison. The existing MKBHD example and default Actor input are unchanged.
+
+## CSV comparison and client reporting
+
+1. Start with direct channel URLs, Fast mode, and small limits. Read the `RUN-SUMMARY` coverage record before interpreting results. A successful run can still have an unavailable tab, capped collection, or uncertain dates.
+2. Export the **full dataset** as CSV or JSON, retaining `recordType`, `channelUrl`, and `scrapedAt`. The Channels/Videos views select columns; they do not automatically separate record types. The existing Videos view omits `channelUrl`, so use the full dataset or an explicit field selection containing it for a reliable join.
+3. Separate `recordType = channel` and `recordType = video` in your reporting tool. Join video rows to channel rows by `channelUrl`; do not join on display name. Deduplicate content by `videoId`, and separate `contentType = video`, `short`, and `live_stream`.
+4. Compare public subscribers, sampled video topics, views, and durations. Label results as a bounded sample, retaining requested limits, coverage, and observation time with the report. Missing values stay unknown, not zero.
+5. If you choose to run again later, retain the earlier export and compare the same channel IDs/URLs and video IDs. A new snapshot is not automatically a growth report. Repeated collection can incur charges; no schedule is created by this example.
+
+| Research question | Existing fields | Interpretation |
+| --- | --- | --- |
+| Which channel is this? | `channelId`, `channelUrl`, `handle` | Use stable identity, not a mutable display name. |
+| How large is its public subscriber count? | `subscriberCount`, `subscriberCountNumber` | Abbreviated labels produce approximate parsed numbers, not private exact counts. |
+| What did this bounded sample cover? | `recordType`, `contentType`, `videoId`, `RUN-SUMMARY` | Fewer rows do not prove fewer uploads; tabs and requests may be capped or unavailable. |
+| What topics and formats appear? | `videoTitle`, `durationSeconds`, `isShorts` | Compare regular videos and Shorts separately; keep missing durations unknown. |
+| How many public views were shown? | `viewCount`, `viewCountNumber`, `scrapedAt` | Counts are observations at collection time, not views earned during your reporting period. |
+| When was content published? | `sourceDateText`, `publishedAtPrecision`, `publishedAtEarliest`, `publishedAtLatest`, `publicationWindowMatch` | Relative labels and uncertain window matches do not establish exact posting time or cadence. |
+| Is detailed contact/engagement evidence available? | `websiteLinks`, `socialProfiles`, `likeCountNumber`, `commentCountNumber` | Requires Detailed mode where supported; not present in this Fast starter and not guaranteed. |
+
+For an external snapshot comparison, calculate subscriber or same-video view deltas only when both observations have non-null counts and matching identities. Keep the original displayed labels and timestamps: rounded counts can conceal small changes, video removals and count corrections can produce negative deltas, and two channels' small recent samples are not directly comparable lifetime performance. Do not calculate engagement or sponsorship value from missing likes/comments.
+
+Use the [creator comparison checklist](https://github.com/erenmyeager15/youtube-channel-scraper/blob/main/examples/US-CREATOR-COMPARISON.md) for a client handoff. CSV exports and coverage evidence support your own reporting workflow; the Actor does not generate an automatic scored shortlist, contact verification, or a rendered client report.
 
 ## Track a competitor channel
 
