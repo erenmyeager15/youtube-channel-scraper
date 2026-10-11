@@ -2,7 +2,7 @@
   "actorSpecification": 1,
   "name": "youtube-channel-scraper",
   "title": "YouTube Channel Scraper - Creator & Competitor Research",
-  "description": "Research creators and competitors with public YouTube channel stats, videos, Shorts, live streams, playlists and posts. US agencies can export CSV for creator shortlists and publishing comparisons. Detailed mode adds available public websites, social links and engagement. No API key, private audience data or personal emails.",
+  "description": "Research YouTube creators and competitors: public channel stats, videos, Shorts, live streams, playlists and posts. US agencies can export CSV for shortlists and content comparisons. Detailed mode adds available public links and engagement. No API key, private analytics or personal emails.",
   "version": "1.0",
   "buildTag": "latest",
   "dockerfile": "Dockerfile",
